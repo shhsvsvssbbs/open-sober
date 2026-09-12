@@ -157,11 +157,27 @@ extern "C" fn w_eglGetProcAddress(st: *mut CpuState) -> u64 {
     let Some(cstr) = (unsafe { read_guest_cstr(name_ptr, 256) }) else {
         return 0;
     };
-    let Ok(c) = CString::new(cstr) else {
+    let Ok(c) = CString::new(cstr.clone()) else {
         return 0;
     };
     let ptr = unsafe { sym_from(mh, c.as_ptr()) };
     if ptr.is_null() {
+        // Diagnostic: log any guest-requested eglGetProcAddress name that we do
+        // not bridge AND Mesa does not export. Such a name yields 0/NULL, so a
+        // later guest `blr` into it would jump-to-NULL. This is how the engine's
+        // real render dispatch table (BSS 0x106d3b2f0 + 8*N) can end up with a
+        // NULL slot even though a real self-driven frame would dispatch through
+        // it (observed: an engine that `bl`s slots 11/12 which read 0x0). The
+        // guest PC (s.pc) pinpoints the calling site so we can identify whether
+        // it routes through the 0x5b3a1c0+0xc*N slot stubs and which one.
+        if std::env::var_os("JIT_EGL_LOG").is_some() {
+            eprintln!(
+                "[eglGetProcAddress] UNRESOLVED name {:?} (guest pc={:#x}, return=0) caller_guest_pc={:#x}",
+                String::from_utf8_lossy(&cstr),
+                s.pc,
+                s.x[30]
+            );
+        }
         return 0;
     }
     ptr as u64
@@ -237,6 +253,8 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glBindBuffer\0",
     b"glBindBufferBase\0",
     b"glBindBufferRange\0",
+    b"glBufferStorage\0",
+    b"glBufferStorageEXT\0",
     b"glBindFramebuffer\0",
     b"glBindRenderbuffer\0",
     b"glBindTexture\0",
@@ -300,6 +318,10 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glGetProgramInfoLog\0",
     b"glGetProgramBinary\0",
     b"glGetProgramiv\0",
+    b"glGetQueryObjectiv\0",
+    b"glGetQueryObjectivEXT\0",
+    b"glGetQueryObjectui64v\0",
+    b"glGetQueryObjectui64vEXT\0",
     b"glGetRenderbufferParameteriv\0",
     b"glGetShaderInfoLog\0",
     b"glGetShaderPrecisionFormat\0",
@@ -321,9 +343,18 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glIsShader\0",
     b"glIsTexture\0",
     b"glLinkProgram\0",
+    b"glMapBuffer\0",
+    b"glMapBufferOES\0",
+    b"glObjectLabelKHR\0",
     b"glPixelStorei\0",
+    b"glPopGroupMarker\0",
+    b"glPopGroupMarkerEXT\0",
     b"glProgramBinary\0",
     b"glProgramParameteri\0",
+    b"glPushGroupMarker\0",
+    b"glPushGroupMarkerEXT\0",
+    b"glQueryCounter\0",
+    b"glQueryCounterEXT\0",
     b"glReadPixels\0",
     b"glReleaseShaderCompiler\0",
     b"glRenderbufferStorage\0",
@@ -385,6 +416,32 @@ fn gles_handle() -> *mut libc::c_void {
     addr as *mut libc::c_void
 }
 
+/// Fallback handle for GL4 / extension `gl*` names (glBufferStorage, glMapBuffer,
+/// glQueryCounter, glObjectLabelKHR, push/pop-group-marker …) that Mesa's ES-only
+/// `libGLESv2.so.2` does not export but the desktop `libGL.so.1` does. The real
+/// client resolves these through `eglGetProcAddress` to fill the render
+/// dispatch-table slots (BSS 0x106d3b2f0 + 8*N); when the requested name is in
+/// `GLES_INT_NAME_LIST` but absent from GLESv2, we fall back here so the slot is a
+/// real dispatchable Mesa address instead of NULL/0 (the engine `br`s those slots
+/// UNGUARDED, so a 0 would jump-to-NULL in a self-driven frame).
+///
+/// Same RTLD_LOCAL discipline as `gles_handle`: keeps these names visible only to
+/// the whitelisted int-ABI resolver, not the general RTLD_DEFAULT `resolve()`.
+fn gl_desktop_handle() -> *mut libc::c_void {
+    static H: OnceLock<usize> = OnceLock::new();
+    let addr = *H.get_or_init(|| {
+        let candidates: &[&[u8]] = &[b"libGL.so.1\0", b"libGL.so\0"];
+        for path in candidates {
+            let h = unsafe {
+                libc::dlopen(path.as_ptr() as *const libc::c_char, libc::RTLD_NOW | libc::RTLD_LOCAL)
+            };
+            if !h.is_null() { return h as usize; }
+        }
+        0
+    });
+    addr as *mut libc::c_void
+}
+
 /// Resolve an integer-ABI `gl*` import against Mesa's real libGLESv2. Only names in
 /// [`GLES_INT_NAME_LIST`] (pure integer/pointer args, <=8) are safe through the integer
 /// HostCall; float-taking GLES or >8-arg forms return `None` (fall to the NULL/0 stub).
@@ -410,6 +467,18 @@ pub fn resolve_gles_int(name: &[u8]) -> Option<u64> {
     if mh.is_null() { return None; }
     let sym = key.as_ptr();
     let ptr = unsafe { sym_from(mh, sym) };
+    // Fall back to desktop libGL for GL4/extension names that Mesa's ES-only
+    // libGLESv2 does not export (glBufferStorage, glMapBuffer, glQueryCounter,
+    // glObjectLabelKHR, …). The real client resolves these via eglGetProcAddress
+    // into its render dispatch-table slots; returning a real Mesa address here
+    // keeps a self-driven frame from `br`-ing to NULL.
+    let ptr = if ptr.is_null() {
+        let dh = gl_desktop_handle();
+        if dh.is_null() { return None; }
+        unsafe { sym_from(dh, sym) }
+    } else {
+        ptr
+    };
     if ptr.is_null() { return None; }
     let hostf: HostCall = unsafe { std::mem::transmute(ptr) };
     let mut r = resolver().lock().unwrap();
@@ -1826,8 +1895,61 @@ mod tests {
             let nm = format!("{n}\0");
             let in_ = resolve_gles_int(nm.as_bytes())
                 .unwrap_or_else(|| panic!("{n} NOT resolvable via int with trailing NUL"));
-            eprintln!("resolve_gles_int({n}\\0) -> slot {in_:#x}");
+            eprintln!("resolve_gles_int({n}\0) -> slot {in_:#x}");
         }
+    }
+
+    #[test]
+    fn gles4_extension_names_resolve_via_int_bridge_desktop_gl_fallback() {
+        // Regression (SH47): the engine's real render dispatch table (BSS
+        // 0x106d3b2f0 + 8*N) had slots 11/12 read 0x0 even though its render code
+        // brs those slots UNGUARDED. The reason: the client resolves them via
+        // eglGetProcAddress with GL4/extension names (glBufferStorage, glMapBuffer,
+        // glQueryCounter, glObjectLabelKHR, push/pop-group-marker) that Mesa's
+        // ES-only libGLESv2.so.2 does NOT export, so our int bridge returned None
+        // and w_eglGetProcAddress fell through to 0 - a NULL jump in a self-driven
+        // frame. resolve_gles_int now falls back to desktop libGL.so.1 for
+        // whitelisted names absent from GLESv2, so these become real dispatchable
+        // int-bridge slots. All are pure int/ptr ABI (<=4 args), safe through the
+        // integer HostCall. Live proof: the seed snapshot now shows slot 11/12 =
+        // 0x7f0000003098/90 (were 0), and JIT_EGL_LOG dropped from 16 unresolved
+        // to 2 (the un-EXT-suffixed glPush/PopGroupMarker, absent from both libs).
+        let names = [
+            "glBufferStorage", "glBufferStorageEXT",
+            "glMapBuffer", "glMapBufferOES",
+            "glObjectLabelKHR",
+            "glPopGroupMarker", "glPopGroupMarkerEXT",
+            "glPushGroupMarker", "glPushGroupMarkerEXT",
+            "glQueryCounter", "glQueryCounterEXT",
+            "glGetQueryObjectiv", "glGetQueryObjectivEXT",
+            "glGetQueryObjectui64v", "glGetQueryObjectui64vEXT",
+        ];
+        let mut resolved = 0;
+        let mut unresolved = 0;
+        for n in names {
+            let nm = format!("{n}\0");
+            let slot = resolve_gles_int(nm.as_bytes());
+            eprintln!("resolve_gles_int({n}\0) -> {slot:?}");
+            match slot {
+                Some(_) => resolved += 1,
+                None => unresolved += 1,
+            }
+            // Pure int/ptr ABI => never mixed-wrapped.
+            assert!(resolve_gles_mixed(nm.as_bytes()).is_none(), "{n} should not be mixed");
+        }
+        // glBufferStorage / glMapBuffer / glQueryCounter / glObjectLabelKHR are the
+        // load-bearing ones the engine's buffer/timer path actually dispatches
+        // (slot 11 reads w0=GL_UNIFORM_BUFFER,size,NULL,flags = glBufferStorage).
+        for critical in ["glBufferStorage", "glMapBuffer", "glQueryCounter", "glObjectLabelKHR"] {
+            let slot = resolve_gles_int(format!("{critical}\0").as_bytes());
+            assert!(
+                slot.is_some(),
+                "{critical} must resolve via int bridge (desktop-GL fallback)"
+            );
+        }
+        // At least the desktop-exported subset must resolve; libGL.so.1 exports all
+        // but the two un-EXT-suffixed marker names.
+        assert!(resolved >= 13, "expected most names to resolve, got {resolved}/{unresolved}");
     }
 
     #[test]

@@ -1,6 +1,47 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH46) — DISPROVED the SH45 LSM-seed hypothesis for the bare-`--startapp` `RBX::json::Writer string length overflow` abort: the leaked "length" is the guest STACK POINTER (== sp, or sp−0x30), an uninitialized stack std::string in StartApp's launch-params json serialization — not the harness-seeded LSM map (~0x260–0x2a0 MB away). Also proves the type-4 task vector `0x6829ea8` has NO in-code install site (framework-glue only). Workspace 493/0 (was 491/0). Commit pending.
+## Session (Sep 12, 2026, hermes-worker, cycle SH47) — closed the last NULL-dispatch gap in the engine's real GLES render table: GL4/extension slots 11/12 (glBufferStorage/glMapBuffer/glQueryCounter/glObjectLabelKHR et al.) now resolve via a desktop-libGL fallback. Workspace 494/0 (was 493/0). Doc docs/frontier-sh47-gles4-desktop-fallback.md.
+
+The engine's own render dispatch table (BSS `0x106d3b2f0 + 8*N`, built via
+`eglGetProcAddress` / SH3 interception) had **slots 11 and 12 reading 0x0**
+even though its render code `bl`s those slots **unguarded** (slot-11 stub
+`0x5b3a244` ×2, slot-12 `0x5b3a250` ×4). A self-driven frame routing through
+them would `br` to NULL and SIGSEGV — the last uncovered NULL-dispatch surface
+in the engine's GLES3 table (SH19/SH24/SH35 bug class, applied to the slots
+those cycles never reached).
+
+- **Root cause was NOT a missing whitelist entry / float-ABI rejection.** New
+  env-gated `JIT_EGL_LOG=1` diagnostic in `w_eglGetProcAddress` (logs every
+  requested name that fails all bridges AND Mesa GLESv2, w/ guest PC) showed the
+  engine resolves exactly **16 GL4/extension names** that come back 0 because
+  Mesa's ES-only `libGLESv2.so.2` does not export them: `glBufferStorage(EXT)`,
+  `glMapBuffer(OES)`, `glQueryCounter(EXT)`, `glObjectLabelKHR`,
+  `glPush/PopGroupMarker(EXT)`, `glGetQueryObject{ui64v,iv}(EXT)`.
+- **Fix:** new `gl_desktop_handle()` (dlopen `libGL.so.1`, same RTLD_LOCAL
+  discipline) + `resolve_gles_int()` falls back to it for whitelisted int-ABI
+  names absent from GLESv2. All 16 added to `GLES_INT_NAME_LIST` (each pure
+  int/ptr ABI ≤4 args → safe through the integer HostCall, rejected by mixed).
+  Engine table auto-heals via SH3 — no harness re-seed.
+- **Live proof** (`runs/sh47-egllog2.txt`): seed snapshot slots 11/12 went
+  `0x0` → `0x7f0000003098/90` (real bridge slots); UNRESOLVED dropped 16 → 2
+  (only un-EXT-suffixed `glPush/PopGroupMarker`, absent from both libs; the EXT
+  variants are bridged). Full productized render re-verified exit 124: triangle
+  centroid red, textured quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE, 3 fresh
+  quad-loop frames, swaps all `Ok(0x1)`. Slots-11/12 disasm: callers pass
+  `w0=0x8a11 (GL_UNIFORM_BUFFER), size, NULL data, flags` == **glBufferStorage**
+  — the engine's modern UBO path already dispatches it.
+- New regression `gles4_extension_names_resolve_via_int_bridge_desktop_gl_fallback`
+  pins all 15 desktop-exported names + the critical subset resolve via int
+  bridge (trailing NUL) and are rejected by mixed. Workspace **494/0** (+1).
+
+**Next (unchanged standing frontier):** the type-4 task-producer vector
+`[0x6829ea8]` is still framework-glue-installed only (SH44/SH46); the engine
+never self-produces a render/session task, so frames remain harness-driven.
+Directions per SH46: (a) synthesize the framework task-producer registration
+from the engine's own game-activity/lifecycle init and call that guest path; or
+(b) advance objective 2b by exercising the fsmap/SQLite datastore plane with
+the client's real serialization. This cycle removed a real NULL-crash surface a
+self-driven frame WOULD hit (buffer/timer/query slots now bridge-routed).
 
 SH45 left the type-4 producer vector `0x6829ea8` as the open standing frontier and
 suggested a concrete next lever: "make the seeded LSM empty-map / fake-object
