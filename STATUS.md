@@ -1,5 +1,20 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH35 (Sep 12, 2026): the engine's REAL GLES3 dispatch-slot table is no longer raw-Mesa — UBO / instanced / program-binary slots now resolve through the JIT bridge. Workspace 477/0 (was 476/0).
+
+SH28's live snapshot showed the engine's own GL-init fills GLES dispatch-table
+slots 4-8 (glUniformBlockBinding / glBindBufferBase / glBindBufferRange /
+glGetUniformBlockIndex / glGetActiveUniformBlockiv), 9/10
+(glDrawElementsInstanced / glDrawArraysInstanced) and 13-15 (glGetProgramBinary /
+glProgramBinary / glProgramParameteri) with **raw-Mesa addresses** (the SH19/SH24
+crash class). Added all ten to `resolver::GLES_INT_NAME_LIST` (pure int/ptr ABI).
+Since the engine builds its table via `eglGetProcAddress` (SH3 → resolve_gles_int),
+the table now auto-heals to bridge slots — verified live (runs/sh35-pipeline-slots.txt):
+PRE-SEED snapshot shows all ten as `0x7f000000…` bridges (was raw Mesa). Render path
+unchanged (wrapper Ok(0x0), swap Ok(0x1), 4×4 grid 16/16 readbacks, exit 124).
+New regression `gles3_pipeline_names_resolve_via_int_bridge_for_engine_draw_slots`.
+Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 6a49574.
+
 ## SH34 (Sep 12, 2026): the coherent renderer scales to a REAL LARGER MESH. New `--renderframe-grid <N>` fabricates an N×N grid of textured quads (independent per-cell, each a distinct texel color at the interpolated vertex UV) driven through the REAL libroblox.so's OWN geometry wrapper 0x5b35288. Verified N=3 (9/9), N=4 (16/16), N=6 (36/36) cell-center glReadPixels readbacks ALL match each cell's exact texel color (±1): 6×6 = 144 verts / 216 idx in one call through engine primitive-setup + indexed glDrawElements, wrapper Ok(0x0), swap Ok(0x1), exit 124. Sustainable (quad-loop 20 iters all Ok(0x1)). Captures runs/sh34-grid.{txt,mp4}; capture_grid.sh. Fixed grid/VBO/tex buffer-overlap bugs (relocated to 0x2000/0x4000/0x6000). Harness-only; single-quad mode (4 distinct checkerboard readbacks) + --jni baseline + baselines unchanged. Workspace 476/0. Doc docs/frontier-sh34-grid.md.
 
 ## SH33 (Sep 12, 2026): SUSTAINABLE TEXTURED real-geometry rendering — `--renderframe-quad-loop <N>` re-drives clear(cycling bg) -> engine geometry wrapper 0x5b35288 -> swap N times on the detached host thread AFTER the single textured-quad proof frame. Verified 6 iterations all drew+swap Ok(0x1) with 5 distinct cycling backgrounds (red/green/blue/yellow/magenta) and the textured readback intact in the same run (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE): a recording proves a fresh textured render every frame. 8-frame x11grab at runs/sh33-quad-loop.mp4. This is the textured/mesh analog of SH25b's triangle-loop — closes the last "sustainable" property for the textured path a real main-loop frame drive needs (textured recipe now both renders correctly AND sustains). Doc docs/frontier-sh33-quad-loop.md; reproducible runs/capture_quad_loop.sh. Harness-only (no codec/resolver change): workspace 476/0; baselines unchanged.

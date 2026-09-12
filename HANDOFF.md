@@ -1,5 +1,32 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH35) — the engine's REAL GLES3 dispatch-slot table is no longer raw-Mesa: the UBO / instanced / program-binary pipeline slots now resolve through the JIT bridge. Workspace 477/0 (was 476/0).
+
+SH28's live slot snapshot showed the engine's own GL-init fills its GLES dispatch
+table (BSS 0x106d3b2f0 + 8*N) slots **4-8** (glUniformBlockBinding / glBindBufferBase /
+glBindBufferRange / glGetUniformBlockIndex / glGetActiveUniformBlockiv), **9/10**
+(glDrawElementsInstanced / glDrawArraysInstanced) and **13-15** (glGetProgramBinary /
+glProgramBinary / glProgramParameteri) with **raw-Mesa host addresses** — the same
+SH19/SH24 crash class (a guest `br` through the 0x5b3a1c0+0xc*N stub jumps
+out-of-image). A real self-driven engine frame dispatching those slots would have
+crashed. This cycle added all ten names to `resolver::GLES_INT_NAME_LIST` (each
+pure int/ptr ABI, ≤8 args; rejected by mixed). Because the engine builds its table
+via `eglGetProcAddress` (SH3 interception → `resolve_gles_int`), its table now
+**auto-heals** to bridge slots — no harness re-seed needed. Verified live
+(runs/sh35-pipeline-slots.txt): the PRE-SEED snapshot now shows all ten as
+`0x7f000000…` bridge slots (SH28 showed raw `0x7f44…` Mesa). Render path untouched
+(geometry wrapper Ok(0x0), swap Ok(0x1), 4×4 grid 16/16 readbacks, exit 124).
+New regression `gles3_pipeline_names_resolve_via_int_bridge_for_engine_draw_slots`.
+Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 6a49574.
+
+**Next (closest unblocked):** the remaining raw-Mesa slot is 3 (glClearBufferfi,
+float ABI — mixed, needs a float bridge wrap to seed; the harness still seeds it
+as glClearStencil for the clear path). Then extend the coherent renderer's
+sustainable loop to dispatch the UBO/instanced/program-binary path through these
+now-bridge slots (prove a larger real mesh renders through the engine's modern
+GLES3 draw, not the harness @plt), keeping the engine's own main-loop-producer
+enqueue as the standing structural frontier.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH34) — the coherent renderer scales to a REAL LARGER MESH: new `--renderframe-grid <N>` fabricates an N×N grid of textured quads (independent per-cell, each a distinct texel color at the interpolated vertex UV) and drives the REAL libroblox.so through the engine's OWN geometry wrapper 0x5b35288. Verified N=3 (9/9), N=4 (16/16), N=6 (36/36) cell-center glReadPixels readbacks ALL match each cell's exact distinct texel color (±1 rounding): 6×6 = 144 interleaved verts / 216 idx drawn in one call through engine primitive-setup + indexed glDrawElements, wrapper Ok(0x0), swap Ok(0x1), exit 124 stable. Sustainable (quad-loop 20 iters all Ok(0x1), fresh mesh each frame). Captures runs/sh34-grid.{txt,mp4}. Doc docs/frontier-sh34-grid.md. Fixes grid/tex buffer-overlap bugs (VBO/EBO -> 0x2000/0x4000, tex -> 0x6000; the old 0xc00/0xf60 clobbered for N≥4/8). Harness-only; single-quad mode + --jni baseline + baselines unchanged. Workspace 476/0.
 
 ## Session (Sep 12, 2026, hermes-worker, cycle SH33) — SUSTAINABLE TEXTURED real-geometry rendering: new `--renderframe-quad-loop <N>` re-drives clear(cycling 5-color bg) -> the engine's OWN geometry wrapper 0x5b35288 -> swap N times on the detached host thread, after the single textured-quad proof frame. Verified 6 iterations, EVERY `drew+swap Ok(0x1)`, 5 distinct cycling backgrounds (a recording proves fresh textured renders), and the textured readback intact in the same run (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE). 8-frame x11grab runs/sh33-quad-loop.mp4. This is the textured/mesh analog of SH25b's triangle-loop — the textured recipe now both RENDERS correctly (SH30-32) AND SUSTAINS (SH33), the two properties a real main-loop frame drive needs. Doc docs/frontier-sh33-quad-loop.md; reproducible runs/capture_quad_loop.sh. Harness-only (no codec/resolver change). Workspace 476/0; baselines unchanged (--jni exit 0, idle 124).

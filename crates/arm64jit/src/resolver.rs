@@ -235,6 +235,8 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glAttachShader\0",
     b"glBindAttribLocation\0",
     b"glBindBuffer\0",
+    b"glBindBufferBase\0",
+    b"glBindBufferRange\0",
     b"glBindFramebuffer\0",
     b"glBindRenderbuffer\0",
     b"glBindTexture\0",
@@ -268,8 +270,10 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glDisable\0",
     b"glDisableVertexAttribArray\0",
     b"glDrawArrays\0",
+    b"glDrawArraysInstanced\0",
     b"glDrawBuffers\0",
     b"glDrawElements\0",
+    b"glDrawElementsInstanced\0",
     b"glEnable\0",
     b"glEnableVertexAttribArray\0",
     b"glFinish\0",
@@ -284,6 +288,7 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glGenerateMipmap\0",
     b"glGetActiveAttrib\0",
     b"glGetActiveUniform\0",
+    b"glGetActiveUniformBlockiv\0",
     b"glGetAttachedShaders\0",
     b"glGetAttribLocation\0",
     b"glGetBooleanv\0",
@@ -293,6 +298,7 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glGetIntegerv\0",
     b"glGetTexLevelParameteriv\0",
     b"glGetProgramInfoLog\0",
+    b"glGetProgramBinary\0",
     b"glGetProgramiv\0",
     b"glGetRenderbufferParameteriv\0",
     b"glGetShaderInfoLog\0",
@@ -301,6 +307,7 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glGetShaderiv\0",
     b"glGetString\0",
     b"glGetTexParameteriv\0",
+    b"glGetUniformBlockIndex\0",
     b"glGetUniformLocation\0",
     b"glGetUniformiv\0",
     b"glGetVertexAttribPointerv\0",
@@ -315,6 +322,8 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glIsTexture\0",
     b"glLinkProgram\0",
     b"glPixelStorei\0",
+    b"glProgramBinary\0",
+    b"glProgramParameteri\0",
     b"glReadPixels\0",
     b"glReleaseShaderCompiler\0",
     b"glRenderbufferStorage\0",
@@ -347,6 +356,7 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glUniformMatrix2fv\0",
     b"glUniformMatrix3fv\0",
     b"glUniformMatrix4fv\0",
+    b"glUniformBlockBinding\0",
     b"glUseProgram\0",
     b"glValidateProgram\0",
     b"glVertexAttribPointer\0",
@@ -1848,6 +1858,45 @@ mod tests {
             eprintln!("resolve_gles_int({n}\\0) -> int bridge OK");
             // Not mixed-ABI wrapped: resolve_gles_mixed must reject them.
             assert!(resolve_gles_mixed(nm.as_bytes()).is_none(), "{n} should not be mixed-wrapped");
+        }
+    }
+
+    #[test]
+    fn gles3_pipeline_names_resolve_via_int_bridge_for_engine_draw_slots() {
+        // Regression (SH28/SH35): the real engine's GLES dispatch table — slots
+        // 4-8 (glUniformBlockBinding/glBindBufferBase/glBindBufferRange/
+        // glGetUniformBlockIndex/glGetActiveUniformBlockiv), 9/10 instanced draws,
+        // 13-15 (glGetProgramBinary/glProgramBinary/glProgramParameteri) — holds
+        // raw-Mesa addresses (same SH19/SH24 crash class: a guest `br` through the
+        // 0x5b3a1c0+0xc*N stub jumps out-of-image). Because these slots were absent
+        // from GLES_INT_NAME_LIST, --renderframe-seedgles could not re-seed them
+        // with bridge slots. All are pure integer/pointer ABI, so each MUST resolve
+        // through the integer bridge (with a trailing NUL, as elfjit passes them),
+        // and MUST be rejected by the float/mixed wrapper.
+        let names = [
+            // UBO / buffer-binding block (SH28 slots 4-8)
+            "glUniformBlockBinding",
+            "glBindBufferBase",
+            "glBindBufferRange",
+            "glGetUniformBlockIndex",
+            "glGetActiveUniformBlockiv",
+            // instanced draws (SH28 slots 9/10 at init)
+            "glDrawElementsInstanced",
+            "glDrawArraysInstanced",
+            // program binary (SH28 slots 13-15)
+            "glGetProgramBinary",
+            "glProgramBinary",
+            "glProgramParameteri",
+        ];
+        for n in names {
+            let nm = format!("{n}\0");
+            let in_ = resolve_gles_int(nm.as_bytes())
+                .unwrap_or_else(|| panic!("{n} NOT resolvable via int bridge (GLES3 pipeline slot)"));
+            eprintln!("resolve_gles_int({n}\\0) -> int bridge slot {in_:#x}");
+            assert!(
+                resolve_gles_mixed(nm.as_bytes()).is_none(),
+                "{n} should not be mixed-wrapped"
+            );
         }
     }
 
