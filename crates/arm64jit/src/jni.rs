@@ -692,7 +692,45 @@ extern "C" fn jni_call_long_method(
     match method_id_name(mid).as_deref() {
         Some(b"getAppUserId") => 0,
         Some(b"getDeviceTotalMemoryMB") => 8192,
+        // LocalStorageManager.getAllocatableBytes() (recon v2): the REAL free
+        // space. Returning 0 makes the engine believe there is no disk and
+        // RbxStorage never builds its content cache — a remembered session's
+        // cache-plane precondition. Report the host filesystem's actual free
+        // bytes for the persistence root so cache sizing matches reality.
+        Some(b"getAllocatableBytes") => allocatable_bytes(),
         _ => 0,
+    }
+}
+
+/// Host free-bytes under the armed SOBER_ANDROID_ROOT (real disk space the
+/// engine's LocalStorageManager cache sizing should see). Falls back to 0 only
+/// if even the root dir cannot be stat'ed (disk unknown).
+fn allocatable_bytes() -> u64 {
+    let root = crate::fsmap::configured_root();
+    let probe = root
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+        .unwrap_or_else(|| std::path::PathBuf::from("/"));
+    let file = match std::fs::File::open(&probe) {
+        Ok(f) => f,
+        Err(_) => return 0,
+    };
+    match nix_sys_stbufs::statvfs_of(&file) {
+        Some((bsize, bavail)) => bsize.saturating_mul(bavail),
+        None => 0,
+    }
+}
+
+// Tiny shim: return the filesystem's block size + free blocks for an open file
+// via libc::fstatvfs (avail * bsize = allocatable bytes).
+mod nix_sys_stbufs {
+    pub fn statvfs_of(f: &std::fs::File) -> Option<(u64, u64)> {
+        use std::os::unix::io::AsRawFd;
+        let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+        let rc = unsafe { libc::fstatvfs(f.as_raw_fd(), &mut st) };
+        if rc != 0 {
+            return None;
+        }
+        Some((st.f_frsize as u64, st.f_bavail as u64))
     }
 }
 
@@ -1584,6 +1622,23 @@ mod tests {
             assert_eq!(g_im(env, 0x4321, mid2, 0, 0, 0, 0, 0), 0, "getMembershipType default 0");
             let (g_lm, _) = host_call_at(get(CALL_LONG_METHOD)).expect("CallLongMethod thunk");
             assert_eq!(g_lm(env, 0x4321, get_name_id(b"getAppUserId"), 0, 0, 0, 0, 0), 0, "getAppUserId default 0");
+            // getAllocatableBytes (LocalStorageManager) reports REAL host free
+            // space — recon-v2: 0 means the engine believes there's no disk and
+            // RbxStorage never builds its content cache (objective 2b). Must be
+            // a positive, plausible live byte count, not the old 0 collapse.
+            let (g_lm2, _) = host_call_at(get(CALL_LONG_METHOD)).expect("CallLongMethod thunk");
+            let free = g_lm2(env, 0x4321, get_name_id(b"getAllocatableBytes"), 0, 0, 0, 0, 0);
+            assert!(free > 0, "getAllocatableBytes reports real (non-zero) free bytes, got {free}");
+            let (_bsize, bavail) = {
+                let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+                let rc = unsafe { libc::statvfs(b"/\0".as_ptr() as *const libc::c_char, &mut st) };
+                assert_eq!(rc, 0, "statvfs / works");
+                (st.f_frsize as u64, st.f_bavail as u64)
+            };
+            assert!(
+                free <= (bavail.saturating_mul(8) * 1024 * 1024 * 1024),
+                "free bytes within a sane order of magnitude of the host disk"
+            );
             // Unrecognized method name still returns 0 (legacy fallback) — so
             // unrelated Call*Method sites (real Java re-entry) are unchanged.
             let midx = get_name_id(b"someOtherMethod");
