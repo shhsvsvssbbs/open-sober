@@ -1,5 +1,38 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH44) — collapsed the ~30-cycle deque "maintenance wall" to its precise mechanism: the type-4 popped-task dispatch vector [0x6829EA8] is 0 on headless boot BUT the task-dispatch plane is proven FUNCTIONAL when that vector is seeded. Workspace 491/0 (unchanged). Commit pending.
+
+The engine's task-deque drain (0x2856e40) has FOUR dispatch sites with hardcoded
+w4 types: heartbeat types 2 (0x2856f24) and 3 (0x2856f68) run telemetry-event
+emitters (globals 0x68262E8/0x6826300/0x6826308/0x6826320, each `adrp 67d1000;
+ldr [x,#1776]; mov w1,#evtid; bl 1e0b0a8`), and the popped-task type 4 (0x2856ffc
+/0x285703c) dispatches through a **distinct BSS function-pointer vector
+`0x6829EA8`** (`adrp 6829000; ldr x3,[x8,#3752]; br x3`). That vector is `.bss`
+(zero-init, no reloc) and remains 0 on every headless boot — including during the
+real render — so any popped task node returns doing nothing (0x285378c->0x2853af0).
+
+**Empirical proof (new `--taskv4-seed` lever; runs/sh44-taskv4-plane.txt):** with
+`--taskv4-seed probe --deque-node-live 0x106829f00 --drain-poll 8`, the drain
+pops 39 injected task nodes and 3 reach the seeded host-thunk handler through the
+REAL dispatcher w4=4 plane with the exact disassembled ABI
+(`handler(node=x0, [node+32]&~1=x1, consumer=x2)`, w4=4, x5=0):
+`type-4 task handler #1: fnarg0(x0)=0x107334000 arg1=0 arg2=0x7f32829a48c0 w4=4`.
+(The follow-on SIGSEGV at guestpc 0x102856f7c is the known force-pop+re-inject+
+patched-drain-recompile race, SH11/SH13 — the 3 clean firings are conclusive.)
+
+**Conclusion / refinement:** the wall is NOT an unreachable dispatch plane — it
+is that **nothing installs the type-4 producer vector headlessly** (only a real
+framework task-producer would). So foreign task nodes can advance the engine only
+once `0x6829EA8` is pointed at a REAL guest frame/session producer. Diagnostic:
+`JIT_FRAMEWORK_DUMP` now also samples `task-v4 [0x106829ea8]` + `v0/2
+[0x106826320]`. Frontier (SH45): reverse what the framework installs into
+0x6829EA8 and what task type/arg selects a frame/session producer; also the
+bare-StartApp `RBX::json::Writer string length overflow` abort (harness LSM
+host-pointer seed leaking into a string-length read on the no-render path — the
+productized `play --jit` recipe bypasses it). Doc
+docs/frontier-sh44-taskv4-vector.md. Baselines unchanged (productized `play
+--jit` still exit 124 + real render).
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH43b) — also proved the legacy `gethostbyname` resolution path (the client imports both DNS APIs). `gethostbyname("localhost")` returns a static thread-local `hostent` — a differently-shaped result than getaddrinfo (h_addrtype@16/h_length@20/h_addr_list@24) — walked to an AF_INET 127.0.0.1. Workspace 491/0 (was 490/0). Commit 75d9d31.
 
 ## Session (Sep 12, 2026, hermes-worker, cycle SH43) — proved the guest DNS plane end-to-end through the real guest ABI: `getaddrinfo("localhost") → ai_addr → connect(203) → sendto → recvfrom` roundtrips a login payload to a real host TCP peer, then frees via the guest's own freeaddrinfo. Workspace 490/0 (was 489/0). Commit 23f4ff4.

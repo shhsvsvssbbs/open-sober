@@ -1445,6 +1445,46 @@ fn main() {
                 eprintln!("[elfjit:deque-node-live] gave up after 400 ticks");
             });
         }
+        // --taskv4-seed <probe|guest-hex>: populate the dispatcher's TYPE-4
+        // popped-task handler vector at guest BSS 0x106829ea8
+        // (dispatcher 0x10285371c w4=4 path: `adrp x8,6829000; ldr x3,[x8,#3752];
+        // br x3` at file 0x2853788/0x28537b8). During headless boot this vector is
+        // 0 (a NULL .bss function ptr a real framework producer would install), so
+        // the drain's type-4 dispatch of ANY popped task node returns at
+        // 0x285378c->0x2853af0 doing nothing — the exact mechanical reason no
+        // injected/foreign node can drive the engine toward a frame. Seeding it
+        // with a registered HOST-THUNK probe (or a chosen guest fn) lets a
+        // sentinel-vtable node pop through the REAL dispatcher w4=4 plane and hit
+        // our vector, proving the plane is dispatchable when the slot is live.
+        if let Some(spec) = std::env::args()
+            .position(|a| a == "--taskv4-seed")
+            .and_then(|i| std::env::args().nth(i + 1))
+        {
+            const TASKV4: u64 = 0x106829ea8;
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static V4: AtomicU64 = AtomicU64::new(0);
+            extern "C" fn v4probe(a0: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, _a6: u64, _a7: u64) -> u64 {
+                let c = V4.fetch_add(1, Ordering::Relaxed) + 1;
+                if c <= 3 || c % 5000 == 0 {
+                    eprintln!(
+                        "[elfjit:taskv4] type-4 task handler #{c}: fnarg0(x0)={a0:#x} arg1={a1:#x} arg2={a2:#x} node={a3:#x} w4={a4} x5={a5}"
+                    );
+                }
+                0
+            }
+            let seed = if spec == "probe" {
+                arm64jit::jit::register_host_call_auto(v4probe)
+            } else {
+                u64::from_str_radix(spec.trim_start_matches("0x"), 16).expect("--taskv4-seed needs 'probe' or a hex guest fn addr")
+            };
+            unsafe {
+                *(TASKV4 as *mut u64) = seed;
+                eprintln!(
+                    "[elfjit:taskv4] seeded dispatcher type-4 vector [0x{TASKV4:x}] = {seed:#x}{}",
+                    if seed != 0 { " — a popped task node reaching w4=4 will now call it" } else { " (cleared)" }
+                );
+            }
+        }
         // --deque-probe: convert the forced-pop sentinel fault into a CONTROLLED
         // type-4 dispatch the SH7b frontier demanded. The engine's real pop-loop
         // (0x2856f94) pops the head node and dispatches
@@ -1667,12 +1707,20 @@ fn main() {
             for _ in 0..60 {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 let ctx = dw(0x1067d16f0);
+                // Type-4 (popped task-node) dispatch vector: the dispatcher
+                // 0x10285371c does `cmp w4,#4; ... adrp x8,6829000; ldr x3,[x8,#3752];
+                // br x3` (file 0x2853788/0x28537b8) — the function pointer our injected
+                // task nodes ACTUALLY call when popped. If it is 0 the type-4 path
+                // returns at 0x285378c->0x2853af0 doing nothing. Also dump the
+                // type-0/2 backup vector at [0x6826000+800]=0x106826320 (`br x4`).
                 eprintln!(
-                    "[elfjit:fw] render-ctx 0x1067d16f0={:#x} | deque-fwd 0x1068262e8={:#x} 0x106826300={:#x} 0x106826308={:#x} | [*ctx]={:#x}",
+                    "[elfjit:fw] render-ctx 0x1067d16f0={:#x} | deque-fwd 0x1068262e8={:#x} 0x106826300={:#x} 0x106826308={:#x} | task-v4 [0x106829ea8]={:#x} v0/2 [0x106826320]={:#x} | [*ctx]={:#x}",
                     ctx,
                     dw(0x1068262e8),
                     dw(0x106826300),
                     dw(0x106826308),
+                    dw(0x106829ea8),
+                    dw(0x106826320),
                     if ctx != 0 && ctx >> 56 == 0 { dw(ctx) } else { 0 },
                 );
             }
@@ -3637,11 +3685,13 @@ fn main() {
                 };
                 let ctx = dw(0x1067d16f0);
                 eprintln!(
-                    "[elfjit:fw] render-ctx 0x1067d16f0={:#x} | deque-fwd 0x1068262e8={:#x} 0x106826300={:#x} 0x106826308={:#x} | render-ctx+0 [*ctx]={:#x}",
+                    "[elfjit:fw] render-ctx 0x1067d16f0={:#x} | deque-fwd 0x1068262e8={:#x} 0x106826300={:#x} 0x106826308={:#x} | task-v4 [0x106829ea8]={:#x} v0/2 [0x106826320]={:#x} | render-ctx+0 [*ctx]={:#x}",
                     ctx,
                     dw(0x1068262e8),
                     dw(0x106826300),
                     dw(0x106826308),
+                    dw(0x106829ea8),
+                    dw(0x106826320),
                     if ctx != 0 && ctx >> 56 == 0 { dw(ctx) } else { 0 },
                 );
             }
