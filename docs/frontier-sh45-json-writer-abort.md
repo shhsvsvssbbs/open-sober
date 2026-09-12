@@ -17,13 +17,17 @@ characterization with concrete evidence, and adds a real diagnostic.
 
 ## Confirmed facts
 
-- The leaked "string length" value is **run-variable** (e.g. `0x7f1f53ffe9f0`,
-  `0x7f6f2bffe9f0`, different on every run), and sits in the **host-heap /
-  mmap region** (`0x7f...`). It is a **host pointer**, not a guest string
-  length. Letting the same boot run to exit shows the value tracks host
-  allocation layout — exactly the SH44 claim that our seeded empty-LSM-map
-  host pointers (bucket array / shared `sub`) leak into a guest string-length
-  read.*
+- The leaked "string length" is **run-variable** (e.g. `0x7f1f53ffe9f0`,
+  `0x7f6f2bffe9f0`, different on every run), and sits in the **host mmap region**
+  (`0x7f...`). It is a **host pointer**, not a guest string length. It does NOT
+  exactly equal either the seeded empty-LSM-map bucket array or the shared `sub`
+  in any run (they differ by ~0x10 MB in the same `0x7f` segment), so the precise
+  leaking allocation is **not positively identified** — the safe statement is that a
+  host pointer is read where the guest expects a string length during StartApp's
+  json serialization. SH44's "harness LSM host-pointer seed leaking" remains the
+  leading hypothesis, not a proven identity. (The faulting read is in host/library
+  fault-land beyond a guest block, so elfjit's guest SIGSEGV dumper does not fire on
+  it — exit 139 without dump on the SIGSEGV variants.)*
 - It is **params-independent**: `{"key":""}`, `{}`, `""`, `"X"` all abort with
   the same signature (different heap value each run). So it is NOT the params
   jstring content.

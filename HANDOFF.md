@@ -1,5 +1,50 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH45) — characterized the bare-StartApp `RBX::json::Writer string length overflow` abort (a run-variable host heap pointer leaked from the seeded empty-LSM-map into a guest json string-length read) and gave elfjit an abort-class crash dumper. Workspace 491/0. Commit 9b99fac.
+
+The SH44 documented open item — "bare-StartApp `RBX::json::Writer string length
+overflow` abort (harness LSM host-pointer seed leaking into a string-length read
+on the no-render bootstrap path; the productized `play --jit` recipe bypasses
+it)" — is now confirmed and precisely characterized (docs/frontier-sh45-json-writer-abort.md):
+
+- The leaked "length" is **run-variable and in the host-mmap region**
+  (`0x7f1f53ffe9f0`, `0x7f6f2bffe9f0`, diff.value each run) — a **host pointer**,
+  read where the guest expects a string length during StartApp's json
+  serialization. The precise leaking allocation is **not positively identified**
+  (it differs from the LSM bucket/sub in every run, though same `0x7f` segment);
+  SH44's "harness LSM host-pointer seed leaking" remains the leading hypothesis,
+  not a proven identity. The `std::runtime_error` is thrown by
+  `RBX::json::Writer` (one of the 7507 throw-with-value sites materializing
+  `0x57765a`, e.g. disasm 0x2355d98/0x2557dcc: `adrp x0,577000; add x0,x0,#0x65a;
+  mov x1,<len>; bl 0x25fb6bc`).
+- **params-independent**: `{"key":""}`, `{}`, `""`, `"X"` all abort (different
+  heap value each run) — not the params jstring.
+- Gated by **absence of the render/lifecycle drive**: the full productized recipe
+  (JIT_DRIVE_LIFECYCLE + appcmd + ANativeWindow + render-init) runs clean (exit
+  124, real triangle + textured-quad frames, zero overflow); only bare
+  `--jni --startapp` hits it. So it is a **harness-bootstrap** artifact, not a
+  production runtime bug. The productized deliverable is unaffected.
+
+Also committed a real diagnostic (elfjit.rs): the fault dumper previously caught
+SIGSEGV/SIGILL only, so an abort-class crash (libc++ terminate → abort / guest
+abort) exited without a guest dump. SIGABRT is now added to the handler set, and
+its default disposition is restored before re-raising via process::abort() (which
+itself delivers SIGABRT — without the restore the handler recurses in an infinite
+dump loop). Now any guest abort yields a full guest PC/regs/backtrace dump.
+
+Verified: `cargo test --workspace` 491/0 (unchanged); build clean; productized
+render re-verified through the modified elfjit (exit 124, real indexed triangle +
+textured quad, swaps Ok(0x1)).
+
+**Next (unchanged, the standing frontier):** the type-4 task producer vector
+`0x6829ea8` remains the structural wall — `.bss`, populated only by a real
+framework task-producer absent headlessly; `--taskv4-seed` proves the dispatch
+plane is live when seeded (SH44). If a future cycle needs the bare StartApp path
+to proceed WITHOUT the render recipe, the next lever is to make the seeded LSM
+empty-map / fake-object memory **guest-shaped / zero-length** so StartApp's json
+serialization reads a valid empty string length instead of a host pointer (see
+`seed_static_empty_map` in elfjit.rs + the LSM reader 0x1d99e40).
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH44) — collapsed the ~30-cycle deque "maintenance wall" to its precise mechanism: the type-4 popped-task dispatch vector [0x6829EA8] is 0 on headless boot BUT the task-dispatch plane is proven FUNCTIONAL when that vector is seeded. Workspace 491/0 (unchanged). Commit pending.
 
 The engine's task-deque drain (0x2856e40) has FOUR dispatch sites with hardcoded
