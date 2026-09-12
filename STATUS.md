@@ -1,6 +1,21 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
-## SH40 (Sep 12, 2026): completed the fsmap data-plane path coverage — statx/statfs/truncate/chdir/linkat/readlinkat now remap into the persistent store, and a readlinkat arg-order bug is fixed. Workspace 486/0 (was 484/0). Commit 937870f.
+## SH40b (Sep 12, 2026): added flock(32)+fallocate(285) to guest_svc (SQLite datastore concurrency/preallocation) and dropped a dead duplicate truncate arm. Workspace 486/0. Commit bd00e88.
+
+The real client's datastore is SQLite-backed: it takes advisory file locks
+(flock) on its db/shm files for read/write concurrency and preallocates space
+(fallocate) when growing mmap-backed db files. Both previously hit -ENOSYS.
+Added flock -> host advisory lock and fallocate -> SYS_fallocate; removed a dead
+duplicate truncate(45) arm left at the durability block (the remapped arm added
+earlier in SH40 runs). Extended the fsmap meta test: reopen a store file, flock
+LOCK_EX|NB succeeds, fallocate grows the host file to >=4096, LOCK_UN releases.
+Combined with SH40, the persistent store now survives the full SQLite-style
+life: create, write, statx-exists, flock, fallocate, truncate, readlink, read.
+Verified the whole product boot+render still reproduces with zero
+ENOSYS/unhandled syscalls after both commits (runs/sh40-boot-render-verify.txt:
+real triangle + 6 sustainable textured-quad frames, exit 124).
+
+## SH40 (Sep 12, 2026): completed the fsmap data-plane path coverage — statx/statfs/truncate/chdir/linkat/symlinkat/readlinkat now remap into the persistent store, plus readlinkat AND symlinkat arg-order bug fixes. Workspace 486/0 (was 484/0). Commit 56d7697.
 
 The SH38 data plane remapped openat/mkdirat/unlinkat/renameat/faccessat/newfstatat,
 but the remaining path-taking syscalls a real session's datastore touches were

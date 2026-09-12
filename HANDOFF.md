@@ -1,6 +1,6 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH40) — completed the fsmap data-plane path coverage: statx/statfs/truncate/chdir/linkat/readlinkat now remap into the persistent store, plus a readlinkat arg-order bug fix. Workspace 486/0 (was 484/0). Commit 937870f.
+## Session (Sep 12, 2026, hermes-worker, cycle SH40/40b) — completed the fsmap data-plane path coverage: statx/statfs/truncate/chdir/linkat/symlinkat/readlinkat now remap into the persistent store (fixing readlinkat + symlinkat arg-order bugs), plus flock/fallocate for the SQLite datastore. Workspace 486/0 (was 484/0). Commits 56d7697 + bd00e88.
 
 SH38's fsmap remapped openat/mkdirat/unlinkat/renameat/faccessat/newfstatat, but
 the remaining path-taking syscalls a real session's datastore touches were still
@@ -40,6 +40,19 @@ already wrote to, so a real session's datastore survives a restart end-to-end
 (write → statx-exists → read). Next: the standing producer/deque wall (SH39b) —
 the engine's per-CPU task-deque consumer still parks on the framework producer
 enqueue — or more path-hardening as the real client surfaces new syscall gaps.
+
+**SH40b (bd00e88):** the real client's datastore is SQLite-backed — it takes
+advisory `flock` locks on db/shm files for concurrency and `fallocate`-preallocates
+space when growing mmap-backed db files. Both were unhandled (-ENOSYS). Added
+flock(32) -> host advisory lock and fallocate(285) -> SYS_fallocate; removed a
+dead duplicate truncate(45) arm left at the durability block (the remapped arm
+from SH40 runs). Extended the fsmap meta test to reopen a store file, flock
+LOCK_EX|NB, grow it via fallocate to >=4096, release, close. The persistent
+store now survives the full SQLite-style lifecycle (create → write → statx-exists
+→ flock → fallocate → truncate → readlink → read). Verified the full product
+boot+render still reproduces with ZERO ENOSYS/unhandled syscalls after both
+commits (runs/sh40-boot-render-verify.txt: real triangle centroid red + 6
+sustainable textured-quad frames, exit 124).
 
 ## Session (Sep 12, 2026, hermes-worker, cycle SH39) — PRODUCTIZED the proven JIT boot+render: `open-sober play --apk <real-roblox.apk> --jit` now drives the REAL client's OWN render path (engine GLES bridge on a live Mesa-llvmpipe EGL context) to render real frames — a real indexed glDrawElements triangle (centroid red RGBA(255,0,0,255)) + a real interpolated-UV textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels) + 6 fresh sustainable textured frames (5 distinct cycling backgrounds) — through the actual product entry point instead of the debug harness. Exit 124 (stable idle main loop after the render prove). Workspace 484/0 (was 482/0).
 
