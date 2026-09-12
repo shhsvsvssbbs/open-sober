@@ -1,5 +1,31 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH40 (Sep 12, 2026): completed the fsmap data-plane path coverage — statx/statfs/truncate/chdir/linkat/readlinkat now remap into the persistent store, and a readlinkat arg-order bug is fixed. Workspace 486/0 (was 484/0). Commit 937870f.
+
+The SH38 data plane remapped openat/mkdirat/unlinkat/renameat/faccessat/newfstatat,
+but the remaining path-taking syscalls a real session's datastore touches were
+forwarded raw against the host root — a guest `/data/...` path ENOENTed. Most
+critically **statx(291)**: bionic/Java answer "does my session file exist" there,
+so a wrong statx makes the client think its store is gone. This cycle routes the
+rest of the path-taking syscalls through `remap_path` into the store:
+
+- `statx(291)` (dirfd a0=AT_FDCWD for absolute guest paths; `struct statx` is
+  asm-generic/byte-identical, raw forward writes the guest buffer),
+- `statfs(43)`, `truncate(45)`, `chdir(49)`, `fchmodat(53)`, `fchownat(54)`,
+  `linkat(37)`, `utimensat(88)`, `readlinkat(78)`.
+- **readlinkat arg-order BUG fixed**: the old handler passed the dirfd (a0) as the
+  pathname with a hardcoded AT_FDCWD, so any real guest readlinkat failed; now
+  dirfd=a0, pathname=a1.
+
+2 new hermetic regressions (tests/fsmap_persist.rs, drive guest_svc real ABI, no
+APK): (1) statx reads the store's real stx_size for an existing session file and
+returns -ENOENT for a missing one; statfs on guest `/data` succeeds. (2) truncate
+shrinks the mapped host file, chdir lands in the store, linkat hard-funds a link
+in the store, readlinkat resolves a store symlink (and -ENOENT for missing) —
+which doubles as proof the arg-order fix works. Hermetic proof of the full
+persistence path. Next: the standing producer/deque wall (SH39b) or further
+path-taking syscall hardening as the real client surfaces them.
+
 ## SH38 (Sep 12, 2026): closed the data-plane FS gap — guest file paths under Android's writable roots now remap to a real persistent host store, so the client's datastore/login session can persist "like the real app" (objective 2b enabler). Workspace 482/0 (was 479/0).
 
 New `arm64jit::fsmap` module + syscall wiring: the JIT's `guest_svc` was passing

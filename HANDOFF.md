@@ -1,5 +1,46 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH40) — completed the fsmap data-plane path coverage: statx/statfs/truncate/chdir/linkat/readlinkat now remap into the persistent store, plus a readlinkat arg-order bug fix. Workspace 486/0 (was 484/0). Commit 937870f.
+
+SH38's fsmap remapped openat/mkdirat/unlinkat/renameat/faccessat/newfstatat, but
+the remaining path-taking syscalls a real session's datastore touches were still
+forwarded raw against the host root — a guest `/data/...` path ENOENTed. Most
+critically **statx(291)**: bionic/Java answer "does my session file exist / its
+metadata" there, so a client's statx on its own datastore path resolving to the
+host root + ENOENT makes it *believe its store is gone* — the exact opposite of
+the "remembers sign-in" objective. This cycle routes the rest of the path-taking
+syscalls through `crate::fsmap::remap_path` (+ `ensure_parents` where the call
+creates):
+
+- **statx(291)** — dirfd a0=AT_FDCWD for absolute guest paths; `struct statx` is
+  asm-generic/byte-identical on both arches so a raw forward writes the guest's
+  statx buffer in place.
+- **statfs(43)**, **truncate(45)**, **chdir(49)**, **fchmodat(53)**,
+  **fchownat(54)**, **linkat(37)** (both paths), **utimensat(88)**,
+  **readlinkat(78)** (pathname), **symlinkat(36)** linkpath.
+- **readlinkat arg-order bug FIXED**: the old handler passed the *dirfd* (a0) as
+  the pathname with a hardcoded `AT_FDCWD`, so any real guest readlinkat on a
+  host-resolved path EFAULTed. Now dirfd=a0, pathname=a1 (remapped).
+
+New hermetic regressions (tests/fsmap_persist.rs, drive the REAL guest_svc ABI,
+no APK):
+1. `fsmap_statx_and_statfs_reach_the_persistent_store` — after an openat+write
+   of `session.dat`, statx reads back the store's REAL stx_size (offset 40 of
+   the 256-byte asm-generic `struct statx`); statx on a MISSING store path
+   returns -ENOENT (not EPERM, proving it resolved through the store); statfs on
+   guest `/data` succeeds.
+2. `fsmap_truncate_chdir_linkat_readlinkat_resolve_through_store` — truncate
+   shrinks the mapped host file to 4 bytes; chdir lands in the store; linkat
+   hard-links a store file; readlinkat resolves a store symlink and returns
+   -ENOENT for a missing path (this doubles as proof the arg-order fix works,
+   since the old code would have read the AT_FDCWD dirfd as the path).
+
+All path-taking fs syscalls now reach the same persistent store that openat/write
+already wrote to, so a real session's datastore survives a restart end-to-end
+(write → statx-exists → read). Next: the standing producer/deque wall (SH39b) —
+the engine's per-CPU task-deque consumer still parks on the framework producer
+enqueue — or more path-hardening as the real client surfaces new syscall gaps.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH39) — PRODUCTIZED the proven JIT boot+render: `open-sober play --apk <real-roblox.apk> --jit` now drives the REAL client's OWN render path (engine GLES bridge on a live Mesa-llvmpipe EGL context) to render real frames — a real indexed glDrawElements triangle (centroid red RGBA(255,0,0,255)) + a real interpolated-UV textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels) + 6 fresh sustainable textured frames (5 distinct cycling backgrounds) — through the actual product entry point instead of the debug harness. Exit 124 (stable idle main loop after the render prove). Workspace 484/0 (was 482/0).
 
 The SH15–SH38 frontier had proven this capability only inside the `elfjit` debug

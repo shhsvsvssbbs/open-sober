@@ -776,9 +776,16 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
             let (p, _keep) = mappath(a[1] as *const c_char, false);
             unsafe { libc::unlinkat(a[0] as c_int, p, a[2] as c_int) as c_long }
         }
-        36 => unsafe { libc::symlinkat(a[1] as *const c_char, a[0] as c_int, a[2] as *const c_char) as c_long },
-        37 => unsafe { // linkat(37)
-            libc::syscall(libc::SYS_linkat, a[0] as usize, a[1] as usize, a[2] as usize, a[3] as usize, a[4] as usize) as c_long
+        36 => unsafe { // symlinkat(36): target(x0), newdirfd(x1), linkpath(x2) — the
+            // linkpath is created in the store, so remap it. (Old handler had
+            // target/newdirfd swapped -> -EFAULT; fixed like readlinkat.)
+            let (p, _keep) = mappath(a[2] as *const c_char, true);
+            libc::symlinkat(a[0] as *const c_char, a[1] as c_int, p) as c_long
+        },
+        37 => unsafe { // linkat(37): olddirfd, oldpath, newdirfd, newpath, flags
+            let (p1, _k1) = mappath(a[1] as *const c_char, true);
+            let (p2, _k2) = mappath(a[3] as *const c_char, true);
+            libc::syscall(libc::SYS_linkat, a[0] as usize, p1 as usize, a[2] as usize, p2 as usize, a[4] as usize) as c_long
         },
         38 => {
             let (p1, _k1) = mappath(a[1] as *const c_char, false);
@@ -788,14 +795,32 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         158 => unsafe { // getgroups(158): count, list
             libc::getgroups(a[0] as c_int, a[1] as *mut libc::gid_t) as c_long
         },
-        49 => unsafe { libc::chdir(a[0] as *const c_char) as c_long },
+        49 => {
+            // chdir(49): remap the target so a session that cd's under a
+            // writable Android root lands in the persistent store.
+            let (p, _keep) = mappath(a[0] as *const c_char, false);
+            unsafe { libc::chdir(p) as c_long }
+        },
+        45 => {
+            // truncate(45): remap so a datastore file can be sized to 0 under
+            // the persistent guest root.
+            let (p, _keep) = mappath(a[0] as *const c_char, false);
+            unsafe { libc::truncate(p, a[1] as libc::off_t) as c_long }
+        }
         61 => unsafe { libc::syscall(libc::SYS_getdents64, a[0] as c_int, a[1] as usize, a[2] as usize) as c_long },
         62 => unsafe { libc::lseek(a[0] as c_int, a[1] as i64, a[2] as c_int) as c_long },
         48 => {
             let (p, _keep) = mappath(a[0] as *const c_char, false);
             unsafe { libc::faccessat(libc::AT_FDCWD, p, a[1] as c_int, 0) as c_long }
         }
-        78 => unsafe { libc::syscall(libc::SYS_readlinkat, libc::AT_FDCWD as usize, a[0] as usize, a[1] as usize, a[2] as usize) as c_long },
+        78 => {
+            // readlinkat(78): dirfd, pathname, buf, bufsiz. The old handler was
+            // WRONG: it passed the dirfd (a[0]) as the pathname with a hardcoded
+            // AT_FDCWD, so any real guest readlinkat on a host-resolved path
+            // EFAULTed. Fix the arg order AND remap the pathname.
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            unsafe { libc::syscall(libc::SYS_readlinkat, a[0] as usize, p as usize, a[2] as usize, a[3] as usize) as c_long }
+        },
         59 => unsafe { libc::pipe2(a[0] as *mut c_int, a[2] as c_int) as c_long },
         96 => unsafe { libc::syscall(libc::SYS_set_tid_address, a[0] as usize) as c_long },
         99 => 0, // set_robust_list: a no-op (no robust futexes) is valid; glibc retries if it errors
@@ -1123,14 +1148,21 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
             }
         }
         // --- statx (291): the modern stat query (bionic/Java use it for file
-        // metadata); `struct statx` is asm-generic and byte-identical on both
-        // arches, so a raw forward writes the guest's statx buffer in place. ---
-        291 => unsafe {
-            libc::syscall(
-                libc::SYS_statx,
-                a[0] as usize, a[1] as usize, a[2] as usize,
-                a[3] as usize, a[4] as usize,
-            ) as c_long
+        // metadata / existence checks — "does the datastore file exist" is
+        // answered HERE, so a guest statx on a /data/... path MUST reach the
+        // persistent store or the client thinks its store is missing). st dirfd
+        // is a[0]=AT_FDCWD for absolute guest paths; `struct statx` is
+        // asm-generic and byte-identical on both arches, so a raw forward
+        // writes the guest's statx buffer in place. ---
+        291 => {
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            unsafe {
+                libc::syscall(
+                    libc::SYS_statx,
+                    a[0] as usize, p as usize, a[2] as usize,
+                    a[3] as usize, a[4] as usize,
+                ) as c_long
+            }
         },
         // --- get_robust_list (100): glibc's pthread init probes for a robust
         // futex list; report a valid EMPTY list (a zeroed `next`) rather than
@@ -1151,9 +1183,11 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         43 => {
             // AArch64 statfs (43): path, struct statfs*. Write the guest layout,
             // same fields as the 64-bit asm-generic struct the host fills.
+            // Remap so free-space checks on a guest /data mount go to the store.
             unsafe {
                 let mut fs = core::mem::MaybeUninit::<libc::statfs>::zeroed().assume_init();
-                let r = libc::statfs(a[0] as *const c_char, &mut fs);
+                let (p, _keep) = mappath(a[0] as *const c_char, false);
+                let r = libc::statfs(p, &mut fs);
                 if r == 0 { write_guest_statfs(a[1], &fs); }
                 r as c_long
             }
@@ -1180,11 +1214,19 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         232 => unsafe { libc::mincore(a[0] as *mut c_void, a[1] as usize, a[2] as *mut u8) as c_long },
         // --- file metadata ownership / timestamps ---
         53 => unsafe { // fchmodat(53): dirfd, path, mode, flags
-            libc::fchmodat(a[0] as c_int, a[1] as *const c_char, a[2] as libc::mode_t, a[3] as c_int) as c_long
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            libc::fchmodat(a[0] as c_int, p, a[2] as libc::mode_t, a[3] as c_int) as c_long
         },
-        54 => unsafe { libc::fchownat(a[0] as c_int, a[1] as *const c_char, a[2] as libc::uid_t, a[3] as libc::gid_t, a[4] as c_int) as c_long },
+        54 => unsafe { // fchownat(54): dirfd, path, uid, gid, flags
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            libc::fchownat(a[0] as c_int, p, a[2] as libc::uid_t, a[3] as libc::gid_t, a[4] as c_int) as c_long
+        },
         55 => unsafe { libc::fchown(a[0] as c_int, a[1] as libc::uid_t, a[2] as libc::gid_t) as c_long },
-        88 => unsafe { libc::utimensat(a[0] as c_int, a[1] as *const c_char, a[2] as *const libc::timespec, a[3] as c_int) as c_long },
+        88 => unsafe { // utimensat(88): dirfd, path, times, flags — remap so a
+            // datastore file's mtime can be set through the persistent root.
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            libc::utimensat(a[0] as c_int, p, a[2] as *const libc::timespec, a[3] as c_int) as c_long
+        },
         // --- session / process group ---
         156 => unsafe { libc::getsid(a[0] as c_int) as c_long },
         157 => unsafe { libc::setsid() as c_long },
