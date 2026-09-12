@@ -1,5 +1,36 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH39) — PRODUCTIZED the proven JIT boot+render: `open-sober play --apk <real-roblox.apk> --jit` now drives the REAL client's OWN render path (engine GLES bridge on a live Mesa-llvmpipe EGL context) to render real frames — a real indexed glDrawElements triangle (centroid red RGBA(255,0,0,255)) + a real interpolated-UV textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels) + 6 fresh sustainable textured frames (5 distinct cycling backgrounds) — through the actual product entry point instead of the debug harness. Exit 124 (stable idle main loop after the render prove). Workspace 484/0 (was 482/0).
+
+The SH15–SH38 frontier had proven this capability only inside the `elfjit` debug
+harness; the real product command (`open-sober play --jit`) still ran a crude
+`jit::run_elf_entry` stub that couldn't bootstrap the real client. This cycle
+wires them together:
+
+- `crates/sober-core/src/jitlaunch.rs` (new): `invocation_proven(lib, frames)`
+  builds the canonical recipe `JNI_OnLoad(0x2173ff4) → StartApp(0x258b144) →
+  render-init thunk(0x105b3a280) → renderthunk → renderframe(+drive+seedgles) →
+  drawprobe → triangle → quad → quad-loop N → kicker(0x106863af8)` with
+  `JIT_DRIVE_LIFECYCLE=1` + `RENDERINIT_WARMUP_MS=5000`; `resolve_elfjit_bin()`
+  finds/builds the `elfjit` example binary; `launch_jit(lib)` spawns it against
+  the extracted `libroblox.so` (elfjit self-contains Xvfb, ANativeWindow→X11 XID
+  wiring, and `SOBER_ANDROID_ROOT` arming from SH38/SH38b).
+- `main.rs`: the `--jit` branch now `apk::extract_libs → qemu::find_main_binary →
+  jitlaunch::launch_jit`. The superseded `jit.rs` (`run_elf_entry`) module is
+  removed.
+- 2 new regression tests pin the proven recipe + the bounded frame count.
+
+Real proof (runs/capture_jit_play.sh, log runs/sh39-play-jit.txt): the APK
+extraction resolved the real `libroblox.so`, the whole chain product command →
+APK → real binary → JIT → engine render ran, and the render (`geometry wrapper
+0x5b35288 Ok(0x0)`, `swap Ok(0x1)`, exact readbacks, 6 fresh frames) succeeded.
+Doc docs/frontier-sh39-productize-play-jit.md.
+
+Honest scope: render is still harness-driven on the live engine context — the engine's
+own main-loop producer still never enqueues a render task (SH14's standing structural
+wall). SH39 changes WHERE the harness is driven from (the product command, not a debug
+example) and arms persistence so a real session's datastore can persist.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH38) — closed the data-plane FS gap: guest file paths under Android's writable roots now remap to a real persistent host store, so the client's datastore/login session can persist "like the real app". Workspace 482/0 (was 479/0).
 
 New `arm64jit::fsmap` module (crates/arm64jit/src/fsmap.rs) + syscall wiring: the

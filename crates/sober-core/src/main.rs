@@ -13,7 +13,7 @@
 mod apk;
 mod config;
 mod qemu;
-mod jit;
+mod jitlaunch;
 mod android_env;
 mod dirs_setup;
 
@@ -133,10 +133,8 @@ fn run_play(cli: &Cli, cfg: &config::SoConfig) -> anyhow::Result<()> {
         info!("Launching via in-process JIT (no QEMU)...");
         let libs = apk::extract_libs(&apk_path, &env.root)?;
         let bin = qemu::find_main_binary(&libs)?;
-        let en_try: u64 = 0;
-        let r = jit::run_elf_entry(&bin, en_try)?;
-        println!("JIT entry returned {r}");
-        return Ok(());
+        info!("Main Roblox binary for JIT: {}", bin.display());
+        return jitlaunch::launch_jit(&bin);
     }
 
     // Launch via QEMU user-mode
