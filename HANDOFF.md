@@ -1,5 +1,30 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH42b) — proved the CLIENT-side network plane end-to-end through the real `guest_svc` ABI: socket(198)→connect(203)→sendto(206)→recvfrom(207)→close roundtrip a login payload to a REAL host TCP peer on loopback. Workspace 489/0 (was 488/0). Commit 5cc3dd8.
+
+The pre-existing `socketpair(199)+sendmsg/recvmsg` test only covers a
+pre-connected pair. A logged-in session's TLS/HTTPS stack funnels byte I/O via
+socket→connect→send/recv to an EXTERNAL peer (talking to the host's loopback
+exactly as to a Roblox API host), so a real `TcpListener` in a server thread is
+spawned and the guest syscall ABI drives connect(127.0.0.1), sendto("SESSDATA\n"),
+recvfrom("PONG" echo claim), close; the server asserts it received the exact
+payload. Fixes the sockaddr byte-order in the test (`sin_addr.s_addr` is
+network-order — portable htonl(INADDR_LOOPBACK) form, not naive from_be_bytes
+which made 127.0.0.1 read as 1.0.0.127 → connect ETIMEDOUT). No prod-code change
+(all four syscalls already forwarded); this is a regression pinning the full
+client network path as drop-through-functional. Real boot unchanged (SH42's
+sh42-boot-reverify.txt still exit 124 + real render).
+
+**Next (closest unblocked):** the data-plane (SQLite lifecycle incl.
+preadv/pwritev/sync, SH42) and the client network plane (SH42b) are both proven
+through the real ABI. The standing structural wall (SH14, re-confirmed SH41) is
+still: the engine's own main-loop producer never enqueues a render-task type
+(w4=4 cap), so frames are harness-driven. Directions: (a) drive the
+confirmed-live deque-maintenance globals (0x1068262e8/300/308) via
+--deque-node-live and see if a maintenance dispatch advances the session past
+idle; or (b) harden the Android-framework JNI path a logged-in session touches
+when it reads/writes its now-persistent store.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH42) — closed the last data-plane syscall gap: vectored positional I/O + durability. preadv(69)/pwritev(70)/sync(81) are now handled in guest_svc (previously -ENOSYS), completing the raw-SQLite session-datastore lifecycle. Workspace 488/0 (was 487/0). Commit 7351654.
 
 Auditing the handled-syscall set against what a real SQLite-backed datastore

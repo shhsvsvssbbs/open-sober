@@ -1,5 +1,29 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH42b (Sep 12, 2026): proved the client-side network plane end-to-end — guest `socket(198)/connect(203)/sendto(206)/recvfrom(207)` roundtrip a login payload to a REAL host TCP peer. Workspace 489/0 (was 488/0). Commit 5cc3dd8.
+
+The existing `socketpair(199)+sendmsg/recvmsg` test proved only a pre-connected
+pair. A logged-in session's TLS/HTTPS stack (bionic+boringssl inside the guest)
+funnels byte I/O through socket→connect→send/recv to an EXTERNAL peer, so the
+real `guest_svc` ABI is now driven against a host `TcpListener` on loopback:
+socket, connect(127.0.0.1:ephemeral), sendto("SESSDATA\n"), recvfrom("PONG"
+echo), close — asserting the connected stream roundtrips exactly as a real
+session's HTTPS would. Test-fix: `sin_addr.s_addr` is network-order (portable
+`htonl(INADDR_LOOPBACK)` form, not naive `from_be_bytes` which made 127.0.0.1
+read as 1.0.0.127 → connect ETIMEDOUT).
+
+No prod-code change (all four syscalls were already handled); this pins the full
+CLIENT network path as drop-through-functional. Real boot re-verified unchanged
+in SH42. 
+
+**Next (closest unblocked):** data-plane (SQLite lifecycle incl. preadv/pwritev/sync)
+and the client network plane are both proven. Standing structural wall (SH14,
+re-confirmed SH41/42): the engine never self-produces a render task (w4=4 cap),
+so frames are harness-driven. Directions: (a) drive the confirmed-live
+deque-maintenance globals (0x1068262e8/300/308) via --deque-node-live; or
+(b) further harden the Android-framework JNI path a logged-in session touches
+when it reads/writes its store.
+
 ## SH42 (Sep 12, 2026): closed the last data-plane syscall gap — vectored positional I/O + durability (preadv(69)/pwritev(70)/sync(81)) now handled in guest_svc. Workspace 488/0 (was 487/0). Commit 7351654.
 
 A real SQLite-backed session datastore flushes db/shm pages with **pwritev**
