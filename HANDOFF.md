@@ -1,6 +1,6 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH58) — first REAL-guest-handler type-4 seed executed on the real binary: the drain's w4=4 dispatch `br`'d into the engine's OWN frame-fn (real engine code ran at guestpc 0x105b2e98c) before ABI-faulting. Workspace **503/0** (was 502/0, +1). Commit 30fa4c6. Doc docs/frontier-sh58-taskv4-realseed.md, artifacts runs/sh58-{taskv4-realseed,taskv4-sustain,baseline}.txt.
+## Session (Sep 12, 2026, hermes-worker, cycle SH58) — first REAL-guest-handler type-4 seed executed on the real binary: the drain's w4=4 dispatch `br`'d into the engine's OWN frame-fn (real engine code ran at guestpc 0x105b2e98c) before ABI-faulting. Workspace **503/0** (was 502/0, +1). Commit 2922518. Doc docs/frontier-sh58-taskv4-realseed.md, artifacts runs/sh58-{taskv4-realseed,taskv4-sustain,baseline}.txt.
 
 Every SH44-57 frontier doc names the same next step: "feed a REAL engine
 frame/session producer address into the seed so a sustainably-dispatched task
