@@ -53,14 +53,15 @@ are the only two missing from both GLESv2 and desktop GL).
 
 ## Verification (live + regression)
 
-- Productized `play --jit` recipe re-run with `JIT_EGL_LOG=1` exit 124 (stable
-  idle loop), full render green (triangle centroid red, textured quad
-  BL=RED/BR=GREEN/TR=WHITE/TL=BLUE, 3 quad-loop fresh frames, every swap
-  `Ok(0x1)`).
-- **Slots 11/12 in the seed snapshot went from `0x0` → `0x7f0000003098/90`
-  (real bridge slots)**; UNRESOLVED dropped from **16 → 2** (only
-  un-EXT-suffixed `glPush/PopGroupMarker`, absent from both libs — the EXT
-  variants are bridged).
+- Productized `open-sober play --apk --jit` (the real product command) re-run
+  with my changes — see `runs/sh47-play-jit.txt`: exit 124 (stable idle loop),
+  full render green (3 geometry-wrapper Ok(0x0), triangle centroid red, textured
+  quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE, 6 fresh quad-loop frames, every swap
+  Ok(0x1)), and **slots 11/12 = 0x7f0000003098/90** in the seed snapshot.
+- Direct harness re-run with `JIT_EGL_LOG=1` — `runs/sh47-egllog2.txt`:
+  **slots 11/12 went `0x0` → `0x7f0000003098/90` (real bridge slots)**;
+  UNRESOLVED dropped from **16 → 2** (only un-EXT-suffixed `glPush/PopGroupMarker`,
+  absent from both libs — the EXT variants are bridged).
 - New regression
   `gles4_extension_names_resolve_via_int_bridge_desktop_gl_fallback` pins all
   15 desktop-exported names resolve through the int bridge (trailing NUL) and
