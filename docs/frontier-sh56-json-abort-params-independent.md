@@ -65,5 +65,14 @@ remain harness-driven on the live engine context.
 - `cargo test --workspace` **499/0** (unchanged).
 - Productized `play` render re-verified green with the new flag compiled in (default
   JSON path unchanged, no regression).
+- **Productized + `--startapp-jobject`** (real AutoValue jobject under the full
+  lifecycle+render drive, runs/sh56-product-jobject.txt): runs clean, exit 124 stable
+  idle, same real render (triangle centroid red, textured quad
+  BL=RED/BR=GREEN/TR=WHITE/TL=BLUE, 6 quad-loop frames, swaps Ok(0x1)), persist
+  roundtrip byte-exact, **zero** json-abort — i.e. identical to the JSON baseline. So
+  the params layer is not load-bearing for progression either: StartApp reaches the
+  same idle platform whether the params is a bare JSON jstring or a fully-armed
+  AutoValue jobject with live getter values.
 - Artifacts: runs/sh56-startapp-json-abort.txt, runs/sh56-startapp-jobject-abort.txt,
-  runs/sh56-jsondump.txt (worker ledger /home/hermes-worker/runs/).
+  runs/sh56-jsondump.txt, runs/sh56-product-jobject.txt (worker ledger
+  /home/hermes-worker/runs/).
