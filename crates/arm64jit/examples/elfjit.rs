@@ -86,7 +86,7 @@ unsafe fn install_fault_debug() {
             let x28 = if (rbx as usize) & 7 == 0 { *(rbx.wrapping_add(224) as *const u64) } else { 0 };
             let x29 = if (rbx as usize) & 7 == 0 { *(rbx.wrapping_add(232) as *const u64) } else { 0 };
             let x30 = if (rbx as usize) & 7 == 0 { *(rbx.wrapping_add(240) as *const u64) } else { 0 };
-            let name = if sig == libc::SIGSEGV { "SIGSEGV" } else if sig == libc::SIGILL { "SIGILL" } else { "SIGFAULT" };
+            let name = if sig == libc::SIGSEGV { "SIGSEGV" } else if sig == libc::SIGILL { "SIGILL" } else if sig == libc::SIGABRT { "SIGABRT" } else { "SIGFAULT" };
             let tid = unsafe { libc::syscall(libc::SYS_gettid) };
             // Does the faulting host thread actually run a guest CpuState?
             // Compare the ucontext RBX against the registered CpuState pointer
@@ -162,9 +162,19 @@ unsafe fn install_fault_debug() {
             btd.push('\n');
             libc::write(2, btd.as_bytes().as_ptr() as *const libc::c_void, btd.len());
         }
+        // Restore default disposition for SIGABRT before re-raising via
+        // process::abort() (which delivers SIGABRT); otherwise we recurse into
+        // this handler in an infinite dump loop.
+        if sig == libc::SIGABRT {
+            unsafe {
+                let mut sa: libc::sigaction = std::mem::zeroed();
+                sa.sa_sigaction = libc::SIG_DFL;
+                libc::sigaction(libc::SIGABRT, &sa, std::ptr::null_mut());
+            }
+        }
         std::process::abort();
     }
-    for sig in [libc::SIGSEGV, libc::SIGILL] {
+    for sig in [libc::SIGSEGV, libc::SIGILL, libc::SIGABRT] {
         let mut sa: libc::sigaction = std::mem::zeroed();
         sa.sa_sigaction = handler as usize;
         sa.sa_flags = libc::SA_SIGINFO;
