@@ -1,5 +1,17 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH52) — closed the real client's last 11 unresolved data imports: the `AMEDIAFORMAT_KEY_*` media-format string constants (Android libmediandk absent host-side) now bind to live host C strings. Workspace **497/0** (was 496/0, +1). Commit 4fe90da. Doc docs/frontier-sh52-media-keys-data.md, log runs/sh52-product-verify.txt.
+
+The productized boot line previously read `bound 534 JUMP_SLOT + 67 GLOB_DAT/ABS64 (0 unresolved), 11 unresolved` — 11 data-object GLOB_DAT slots that `dlsym` could not resolve (bionic/mediandk-only symbols). Now reads `... + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved`. The gap was precisely:
+
+- **10× `AMEDIAFORMAT_KEY_*`** (Object, UND): the NDK media-format string constants. A GLOB_DAT relocation writes the **address of the constant** into the GOT slot; the guest does `adrp x0,0x67cf000; ldr x0,[x0,#off]` to load it and passes it to `AMediaFormat_*` as a `const char*`. Left NULL, a real video/audio-decoding session reads a NULL key string — the SH19/SH24 crash class for data reads. `resolve_android_data(name)` now maps each to its NDK value (`"mime"`, `"width"`, ...) as an immortal leaked `CString` (stable/cached pointer).
+- **`__sF`** (Object, UND): bionic's `FILE __sF[3]` (stdin/stdout/stderr) base. **Intentionally left unbound-to-host** — pointing it at a host `FILE_` would make the `fwrite`/`vfprintf` shims misclassify a bionic stream as a real host stream and SIGSEGV; leaving its low value is exactly what the shim's fd2-diversion path already handles. Documented, not a gap to "close".
+- The `AMediaFormat_delete`/`AMediaCodec_delete` obj slots shown in the JIT_TRACE diagnostic are FUNC imports that already stub-bind via the `is_func` path (that's why only 1 is counted unresolved).
+
+Verified: productized `open-sober play --apk --jit` exit 124 stable, real indexed triangle (centroid red) + textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE) + 6 quad-loop frames (swaps Ok(0x1)), `--persist-roundtrip` byte-exact, zero ENOSYS; the direct-`--renderinit` SIGSEGV/abort is the documented SH46 pre-existing harness-bootstrap artifact (identical pre-change), not a regression. New regression `android_media_format_key_data_imports_resolve_to_live_strings` pins all 10 constants byte-exact + cached-pointer stability + that unrelated object names (`__sF`, unknown) fall through unclaimed.
+
+`__sF` remains the single legitimately-unresolved data import and is **by design** (see above). The standing structural wall is unchanged: the type-4 producer vector `[0x6829ea8]` is still framework-glue-installed only (SH46), so frames stay harness-driven on the live engine context.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH51) — the live client's data-persistence plane is now SELF-VERIFYING in the productized deliverable: `open-sober play --apk roblox-android.apk --jit` now drives a real guest `/data/user/0/com.roblox.client/databases/session.db` openat→write→fsync→close→reopen→read roundtrip through `guest_svc`/fsmap and proves it byte-exact on the armed persistent host store — turning the previous ZERO-remap product run into an observable live-client persistence exhibit. Workspace 496/0 (unchanged). Doc docs/frontier-sh51-live-persist.md, log runs/sh51-persist-live.txt.
 
 Objective 2b ("the client REMEMBERS sign-in via its own session/login
