@@ -27,12 +27,13 @@ parent-dir scaffolding for mkdirat/deep O_CREAT. Real boot re-verified unchanged
 (JNI_OnLoad 0x10006, StartApp driven, stable idle main loop).
 
 **Next (closest unblocked):** this closes the data-plane persistence gap (objective
-2b enabler). The standing structural frontier is unchanged (SH14/SH37): the
-engine's own main-loop producer never enqueues a render task, so the engine
-renders what the harness drives. To turn "persistence works" into "the client
-remembers sign-in", arm a persistent SOBER_ANDROID_ROOT under the runtime's data
-dir (sober-core open-sober play / elfjit) and re-open the producer/deque wall so
-the boot enters a real session that reads/writes the now-persistent store. Doc:
+2b enabler). SH38b (ef0cf2b) additionally arms the persistence root in elfjit real
+runs (create + export SOBER_ANDROID_ROOT under XDG/HOME data; verified the full
+boot still exits 124 stable with it armed). The standing structural frontier is
+unchanged (SH14/SH37): the engine's own main-loop producer never enqueues a render
+task, so the engine renders what the harness drives. To turn "persistence works"
+into "the client remembers sign-in", re-open the producer/deque wall so the boot
+enters a real session that reads/writes the now-persistent store. Doc:
 docs/frontier-sh38-fsmap-persist.md.
 
 ## Session (Sep 12, 2026, hermes-worker, cycle SH37) — the SH35-sealed GLES3 pipeline slots are proven FUNCTIONAL, not just resolvable: dispatched through the engine's OWN slot stubs on the live context — program-binary round-trip, UBO bind, instanced draw. Workspace 479/0 (was 478/0). Commits a0ba81c (+8f57 ledger).
