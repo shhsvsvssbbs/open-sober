@@ -578,6 +578,88 @@ extern "C" fn jni_get_string_utf_length(
     read_cstr(jstr).map_or(0, |s| s.len() as u64)
 }
 
+// ---------------------------------------------------------------------------
+// AutoValue AppBridge params getter shim.
+//
+// The engine's V2 boot ladder (nativeGameGlobalInit -> setTaskSchedulerBM ->
+// nativeAppBridgeV2InitWithParams -> nativeAppBridgeStartLuaAppDM ->
+// nativeAppBridgeV2StartAppWithParams) reads its InitParams/StartAppParams/
+// DeviceParams as Java AutoValue objects: it does GetMethodID(cls,"getBaseURL",
+// ...) then CallObjectMethod(params, methodID, ...) to pull each field, and
+// serializes them into the json it sends the engine. Our JNI GetMethodID
+// returns a READABLE handle of the METHOD NAME, so a Call*Method stub can
+// dispatch on the getter name and return a REAL value. Before this shim every
+// Call*Method returned 0, so StartApp's serialization of the params read
+// UNINITIALIZED guest-stack std::strings -> the SH45/SH46 RBX::json
+// string-length-overflow abort. Treating the getters as AutoValue accessors
+// and returning valid empty/default strings gives the json writer a valid
+// length (0) instead of a stack pointer. Unrecognized method names still
+// return 0 (the honest fallback), so unrelated Call*Method sites are unchanged.
+fn method_id_name(mid: u64) -> Option<Vec<u8>> {
+    read_cstr(mid)
+}
+
+/// The AppBridge params' string-valued AutoValue getters -> their default.
+/// Most default to empty; the client expects selectedTheme="Dark". Returning
+/// "" (a real, readable, zero-length jstring) rather than NULL lets the json
+/// writer read a valid 0 length instead of dereferencing NULL or an
+/// uninitialized stack slot.
+fn auto_value_string_getter(name: &[u8]) -> Option<&'static [u8]> {
+    match name {
+        b"getBaseURL" => Some(b""),
+        b"getBuildVariant" => Some(b""),
+        b"getUserAgent" => Some(b""),
+        b"getAppStarterPlace" => Some(b""),
+        b"getAppStarterScript" => Some(b""),
+        b"getSelectedTheme" => Some(b"Dark"),
+        b"getUsername" => Some(b""),
+        b"getAppUserId" => Some(b""),
+        b"getDeviceParams" => Some(b""),
+        b"getPlatformParams" => Some(b""),
+        b"getVrContext" => Some(b""),
+        b"getSurface" => Some(b""),
+        _ => None,
+    }
+}
+
+/// CallObjectMethod(env, obj, methodID, ...): return a real jstring handle for
+/// the AppBridge params string getters; 0 for anything else (unchanged legacy).
+extern "C" fn jni_call_object_method(
+    _e: u64, _obj: u64, mid: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+) -> u64 {
+    if let Some(name) = method_id_name(mid) {
+        if let Some(val) = auto_value_string_getter(&name) {
+            if std::env::var_os("JIT_TRACE").is_some() {
+                eprintln!("[jni] CallObjectMethod getter {} -> {}B string handle", String::from_utf8_lossy(&name), val.len());
+            }
+            return str_handle(val);
+        }
+    }
+    0
+}
+
+/// CallBooleanMethod(env, obj, methodID, ...): the AppBridge params boolean
+/// getters. isUnder13 defaults false. Unrecognized -> 0 (false).
+extern "C" fn jni_call_boolean_method(
+    _e: u64, _obj: u64, mid: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+) -> u64 {
+    match method_id_name(mid).as_deref() {
+        Some(b"isUnder13") => 0, // default false
+        _ => 0,
+    }
+}
+
+/// CallIntMethod(env, obj, methodID, ...): the AppBridge params integer
+/// getters. getMembershipType default 0. Unrecognized -> 0.
+extern "C" fn jni_call_int_method(
+    _e: u64, _obj: u64, mid: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+) -> u64 {
+    match method_id_name(mid).as_deref() {
+        Some(b"getMembershipType") => 0,
+        _ => 0,
+    }
+}
+
 extern "C" fn jni_register_natives(
     _e: u64, cls: u64, methods: u64, n: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
@@ -800,9 +882,13 @@ pub fn build_jni() -> (u64, u64) {
         functions[IS_INSTANCE_OF] = reg(jni_is_instance_of);
         // Call[Object/Boolean/Int/Void]Method + the static forms: return the
         // typed zero. Real Java re-entry isn't wired, so 0 is the honest result.
-        functions[CALL_OBJECT_METHOD] = reg(jni_voidp_0);
-        functions[CALL_BOOLEAN_METHOD] = reg(jni_voidp_0);
-        functions[CALL_INT_METHOD] = reg(jni_voidp_0);
+        // The AutoValue AppBridge params getters are serviced by the getter
+        // shim (jni_call_object_method etc.) so StartApp's serialization reads
+        // valid empty/default strings instead of uninitialized guest-stack
+        // std::strings (the SH45/SH46 json string-length-overflow root cause).
+        functions[CALL_OBJECT_METHOD] = reg(jni_call_object_method);
+        functions[CALL_BOOLEAN_METHOD] = reg(jni_call_boolean_method);
+        functions[CALL_INT_METHOD] = reg(jni_call_int_method);
         functions[CALL_VOID_METHOD] = ok;
         functions[CALL_STATIC_OBJECT_METHOD] = reg(jni_voidp_0);
         functions[CALL_STATIC_BOOLEAN_METHOD] = reg(jni_voidp_0);
@@ -1359,5 +1445,76 @@ mod tests {
         let mut untouched = [0u8; 3];
         jni_get_string_utf_region(0, src as u64, 99, 3, untouched.as_mut_ptr() as u64, 0, 0, 0);
         assert_eq!(untouched, [0u8; 3]);
+    }
+
+    /// The AutoValue AppBridge params getters — the exact Accessors StartApp's
+    /// json serialization reads through CallObjectMethod/CallBooleanMethod/
+    /// CallIntMethod — must return real, readable, non-NULL values through the
+    /// OFFICIAL JNIEnv table (the way the guest dispatches them), so the json
+    /// writer reads a valid empty/default string length instead of an
+    /// uninitialized guest-stack std::string (the SH45/SH46 string-length-
+    /// overflow root cause). InitParams/StartAppParams fields resolve to
+    /// readable jstring handles; unknown method names still fall back to 0.
+    #[test]
+    fn jni_auto_value_params_getters_resolve_via_fn_table() {
+        let (env, _vm) = build_jni();
+        unsafe {
+            let functions = *(env as *const u64);
+            let get = |i: usize| -> u64 { *(functions as *const u64).add(i) };
+            // The guest resolves a getter method ID, then Call*Method(..id..).
+            // GetMethodID returns a readable handle of the method NAME.
+            let get_name_id = |name: &[u8]| -> u64 {
+                let name_buf = unsafe { alloc_zeroed(Layout::array::<u8>(name.len() + 1).unwrap()) };
+                unsafe { std::ptr::copy_nonoverlapping(name.as_ptr(), name_buf, name.len()) };
+                let (f, _) = host_call_at(get(GET_METHOD_ID)).expect("GetMethodID host thunk");
+                f(env, 0, name_buf as u64, 0, 0, 0, 0, 0)
+            };
+            // String-valued StartAppParams/InitParams getters -> real jstring
+            // handles (readable, non-zero), so the json writer sees byte length.
+            for name in [
+                &b"getBaseURL"[..],
+                &b"getBuildVariant"[..],
+                &b"getUserAgent"[..],
+                &b"getAppStarterPlace"[..],
+                &b"getAppStarterScript"[..],
+                &b"getSelectedTheme"[..],
+                &b"getUsername"[..],
+                &b"getAppUserId"[..],
+                &b"getDeviceParams"[..],
+                &b"getPlatformParams"[..],
+                &b"getVrContext"[..],
+                &b"getSurface"[..],
+            ] {
+                let mid = get_name_id(name);
+                assert_ne!(mid, 0, "GetMethodID({}) non-null", String::from_utf8_lossy(name));
+                let (g_om, _) = host_call_at(get(CALL_OBJECT_METHOD)).expect("CallObjectMethod thunk");
+                let h = g_om(env, 0x4321, mid, 0, 0, 0, 0, 0);
+                assert_ne!(h, 0, "CallObjectMethod({}) returns a readable jstring", String::from_utf8_lossy(name));
+                // The returned handle is a readable zero-length (or for
+                // selectedTheme "Dark") jstring — GetStringUTFLength reads it.
+                let (g_sl, _) = host_call_at(get(GET_STRING_UTF_LEN)).expect("GetStringUTFLength thunk");
+                let len = g_sl(env, h, 0, 0, 0, 0, 0, 0);
+                if name == &b"getSelectedTheme"[..] {
+                    assert_eq!(len, 4, "selectedTheme defaults to \"Dark\"");
+                } else {
+                    assert_eq!(len, 0, "{} defaults to empty", String::from_utf8_lossy(name));
+                }
+            }
+            // Boolean getter -> 0 (isUnder13 false); int getter -> 0.
+            let mid = get_name_id(b"isUnder13");
+            let (g_bm, _) = host_call_at(get(CALL_BOOLEAN_METHOD)).expect("CallBooleanMethod thunk");
+            let b = g_bm(env, 0x4321, mid, 0, 0, 0, 0, 0);
+            assert_eq!(b, 0, "isUnder13 default false");
+            let mid2 = get_name_id(b"getMembershipType");
+            let (g_im, _) = host_call_at(get(CALL_INT_METHOD)).expect("CallIntMethod thunk");
+            let iv = g_im(env, 0x4321, mid2, 0, 0, 0, 0, 0);
+            assert_eq!(iv, 0, "getMembershipType default 0");
+            // Unrecognized method name still returns 0 (legacy fallback) — so
+            // unrelated Call*Method sites (real Java re-entry) are unchanged.
+            let midx = get_name_id(b"someOtherMethod");
+            let (g_om2, _) = host_call_at(get(CALL_OBJECT_METHOD)).expect("CallObjectMethod thunk");
+            let v = g_om2(env, 0x4321, midx, 0, 0, 0, 0, 0);
+            assert_eq!(v, 0, "unrecognized getter falls back to NULL/0");
+        }
     }
 }

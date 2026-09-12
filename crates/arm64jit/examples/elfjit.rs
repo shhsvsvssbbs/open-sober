@@ -696,6 +696,98 @@ fn main() {
             .unwrap_or_else(|_| panic!("bad --startapp hex"));
         let start_app = el.guest_of(link);
         eprintln!("[elfjit] driving StartApp @ guest {start_app:#x} after JNI_OnLoad (env={env_ptr:#x} jobject={activity:#x} params={params:#x})");
+
+        // --v2boot: drive the REAL engine boot ladder IN ORDER (the SH53-open
+        // runtime test + the recon's corrective for the bare/out-of-order
+        // StartApp-with-JSON json-abort). The recon (docs/recon-framework-
+        // boot-order.md) reframes the type-4 producer vector [0x106829ea8] as
+        // installed by TaskScheduler init reached only through this exact
+        // order: nativeGameGlobalInit -> setTaskSchedulerBackgroundMode(false)
+        // -> nativeAppBridgeV2InitWithParams -> nativeAppBridgeStartLuaAppDM ->
+        // nativeAppBridgeV2StartAppWithParams. We drive each rung as a fresh
+        // guest entry reusing the boot SP (the JNI natives each prologue
+        // `sub sp` from it), passing AutoValue JNI jobjects (NOT JSON strings)
+        // as the x2 params — serviced by the jni.rs AutoValue getter shim so
+        // StartApp's serialization reads valid empty/default strings — and dump
+        // [0x106829ea8] AFTER EVERY rung. First non-zero vector = the gate
+        // opens (the scheduled producer is live). MUST be spawned BEFORE the
+        // start_app jit_run below (which parks the main thread forever and
+        // never returns), on a detached thread that sleeps its own warmup so
+        // the rungs execute concurrently while StartApp idles. Opt-in.
+        if std::env::args().any(|a| a == "--v2boot") {
+            const BSS_TASKV4: u64 = 0x106829ea8;
+            let boot_sp = st.x[31];
+            let tpidr = arm64jit::jit::current_guest_tp();
+            let ib = base;
+            let iimg = image;
+            let warmup_ms: u64 = std::env::var("V2BOOT_WARMUP_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(4500);
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(warmup_ms));
+                let (env_ptr, _vm) = arm64jit::jni::build_jni();
+                let thiz = arm64jit::jni::new_fake_object(); // Activity jobject
+                let init_params = arm64jit::jni::new_fake_object(); // AutoValue InitParams
+                let start_params = arm64jit::jni::new_fake_object(); // AutoValue StartAppParams
+                let bg_name = arm64jit::jni::new_string_utf_handle(b"ASMA.start");
+                let dw = |a: u64| -> u64 {
+                    if a >= 0x100000000 && a >> 56 == 0 && a & 7 == 0 { unsafe { *(a as *const u64) } } else { 0 }
+                };
+                let dump = |label: &str| {
+                    eprintln!("[elfjit:v2boot] after {label}: [0x106829ea8] = {:#x}", dw(BSS_TASKV4));
+                };
+                // Guest addresses = file vaddr + 0x100000000 (recon quick-ref).
+                let rungs: [(&str, u64, [u64; 8]); 6] = [
+                    // nativeGameGlobalInit (JNIEnv*, jobject)
+                    ("nativeGameGlobalInit", 0x102206404, [env_ptr, thiz, 0, 0, 0, 0, 0, 0]),
+                    // nativeUpdateAdapterInit (JNIEnv*, jobject)
+                    ("nativeUpdateAdapterInit", 0x10221c3ec, [env_ptr, thiz, 0, 0, 0, 0, 0, 0]),
+                    // setTaskSchedulerBackgroundMode(env, thiz, enable=false, name)
+                    ("setTaskSchedulerBM(false)", 0x102bb2380, [env_ptr, thiz, 0, bg_name, 0, 0, 0, 0]),
+                    // nativeAppBridgeV2InitWithParams(env, thiz, InitParams)
+                    ("V2InitWithParams", 0x102365c54, [env_ptr, thiz, init_params, 0, 0, 0, 0, 0]),
+                    // nativeAppBridgeStartLuaAppDM(env, thiz)
+                    ("StartLuaAppDM", 0x1023efe2c, [env_ptr, thiz, 0, 0, 0, 0, 0, 0]),
+                    // nativeAppBridgeV2StartAppWithParams(env, thiz, StartAppParams)
+                    ("V2StartAppWithParams", 0x10258b144, [env_ptr, thiz, start_params, 0, 0, 0, 0, 0]),
+                ];
+                dump("boot start");
+                for (name, guest, args) in &rungs {
+                    eprintln!("[elfjit:v2boot] driving {name} @ guest {guest:#x} (env={env_ptr:#x} thiz={thiz:#x})");
+                    let mut s = arm64jit::jit::CpuState::new();
+                    s.tpidr = tpidr;
+                    s.x[31] = boot_sp;
+                    s.x[..8].copy_from_slice(args);
+                    match arm64jit::jit::jit_run(iimg, ib, *guest, &mut s as *mut CpuState) {
+                        Err(e) => eprintln!("[elfjit:v2boot] {name} stopped: {e}"),
+                        Ok(r) => eprintln!("[elfjit:v2boot] {name} returned Ok({r:#x})"),
+                    }
+                    dump(name);
+                }
+                // Final: also drive the V1 6-jstring AppStart fallback so the
+                // session/home-screen renderer can start even if the V2 path
+                // stays gated (reads params as individual jstrings, not the
+                // AutoValue getters). nativeAppBridgeAppStart__ (0x102338510).
+                eprintln!("[elfjit:v2boot] driving V1 AppStart__ (fallback)");
+                let mut sv = arm64jit::jit::CpuState::new();
+                sv.tpidr = tpidr;
+                sv.x[31] = boot_sp;
+                sv.x[0] = env_ptr;
+                sv.x[1] = thiz;
+                sv.x[2] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[3] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[4] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[5] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[6] = arm64jit::jni::new_string_utf_handle(b"");
+                match arm64jit::jit::jit_run(iimg, ib, 0x102338510, &mut sv as *mut CpuState) {
+                    Err(e) => eprintln!("[elfjit:v2boot] V1 AppStart__ stopped: {e}"),
+                    Ok(r) => eprintln!("[elfjit:v2boot] V1 AppStart__ returned Ok({r:#x})"),
+                }
+                dump("V1 AppStart__");
+                eprintln!("[elfjit:v2boot] ladder done; final [0x106829ea8] = {:#x}", dw(BSS_TASKV4));
+            });
+        }
         let mut s2 = arm64jit::jit::CpuState::new();
         s2.tpidr = arm64jit::jit::current_guest_tp();
         // Continue on the boot-phase guest stack (real SP), not a fresh 0 —
@@ -3760,6 +3852,7 @@ fn main() {
             Err(e) => eprintln!("[elfjit] StartApp stopped: {e}"),
             Ok(r) => eprintln!("[elfjit] StartApp returned Ok({r:#x})"),
         }
+
         // Let any game-start workers run before exiting (or rather: keep the
         // process alive long enough for a real main loop to iterate/block).
         for _ in 0..4000 {

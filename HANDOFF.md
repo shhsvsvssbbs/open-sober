@@ -1,5 +1,42 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH54) — built the ordered V2-boot ladder drive (`--v2boot`) + AutoValue getter shim — the empirical runtime test SH53 left open — and confirmed the type-4 producer vector `[0x106829ea8]` stays 0 while the real `nativeGameGlobalInit` executes. Workspace **498/0** (was 497/0, +1). Doc docs/frontier-sh54-v2boot-ladder.md, artifact runs/sh54-v2boot-{ladder,fw,progress,threads}.txt.
+
+The recon (docs/recon-framework-boot-order.md) demands driving the real V2 boot
+IN ORDER (nativeGameGlobalInit → setTaskSchedulerBackgroundMode(false) →
+V2InitWithParams → StartLuaAppDM → V2StartAppWithParams) with AutoValue JNI
+jobjects, not JSON. SH53 had left only the empirical drive open. Two pieces
+landed this cycle:
+
+1. **AutoValue getter shim (jni.rs).** `CallObjectMethod`/`CallBooleanMethod`/
+   `CallIntMethod` (NDK slots 34/37/49) previously returned 0 for every getter,
+   so StartApp's json serialization read uninitialized guest-stack std::strings
+   — the SH45/SH46 `RBX::json::Writer string length overflow` abort. Because
+   `GetMethodID` returns a readable handle of the method NAME, the new stubs
+   dispatch on the getter name and return a real, readable empty jstring
+   (`"Dark"` for `getSelectedTheme`) / false / 0; unrecognized names still fall
+   back to 0 (real Java re-entry unchanged). Wired into the official NDK table.
+   +1 regression `jni_auto_value_params_getters_resolve_via_fn_table`.
+2. **`--v2boot` ordered ladder (elfjit.rs).** A detached thread — spawned
+   BEFORE the `start_app` jit_run, which parks the main thread forever and never
+   returns — sleeps a warmup then drives the 6 real JNI natives in the recon's
+   load-bearing order as fresh guest entries (reusing the boot SP) with AutoValue
+   jobjects, dumping `[0x106829ea8]` after EVERY rung, then the V1 AppStart__
+   fallback (0x102338510). All params are jobjects (not JSON).
+
+Empirical result (stable productized recipe, exit 124): `nativeGameGlobalInit`
+executes REAL engine code (block cache 2192 ≫ ~434 idle baseline), zero
+SIGSEGV/SIGABRT, no json-string-length-overflow, real renders + persist
+roundtrip intact — yet `task-v4 [0x106829ea8]` stays **0 the entire window**.
+This corroborates SH53 at runtime: the recon's "in-image TaskScheduler install
+reached via the ordered ladder" is not reproduced headlessly. Honest caveat:
+`nativeGameGlobalInit` advances then parks (does not return in the run window),
+so only rung 1 is observed — the vector-0 is measured DURING GlobalInit, not
+after a full ordered completion that reaches the install site. Standing
+structural wall unchanged: the type-4 vector is framework-glue-seeded only;
+`--taskv4-seed` + `--deque-node-live` (SH49) remains the only proven mechanism
+to run the dispatch plane.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH53) — DISPROVED the 2026-09-12 recon's reframe that the type-4 producer vector `[0x106829ea8]` is installed IN-IMAGE by TaskScheduler/V2-init code SH46 "never reached". Workspace **497/0** (unchanged). Commits 277f567, 9694a19 (doc). Doc docs/frontier-sh53-recon-disproof.md.
 
 A recon (docs/recon-framework-boot-order.md + /home/hermes-worker/open-sober-framework-glue-spec.md) claimed the ~50-cycle wall was wrong: SH46's "no in-code store" was because the scan ran on a bare boot that never reaches TaskScheduler init, and driving the real V2 ladder (`nativeGameGlobalInit → nativeUpdateAdapterInit → V2InitWithParams → StartLuaAppDM → [Surface] → StartAppWithParams`) in order would populate the vector. Disproven on two independent grounds:
