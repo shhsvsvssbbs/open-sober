@@ -531,6 +531,20 @@ extern "C" fn w_glTexParameterf(st: *mut CpuState) -> u64 {
     gles_ret!(s)
 }
 
+/// glClearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil):
+/// buffer/drawbuffer in x0/x1, stencil in x2, and the float depth in s0 (the FIRST
+/// FP arg — AAPCS). Verified against the real Roblox clear-state fn 0x5b32ef4:
+/// `ldr s0,[x21,#68]` (depth), `ldr w2,[x21,#72]` (stencil), `mov w0,#0x84f9`
+/// (GL_DEPTH_STENCIL), `mov w1,wzr` (drawbuffer), then bl the slot-3 stub 0x5b3a1e4.
+/// This is the per-buffer combined depth+stencil clear (slot 3), NOT glClearStencil.
+extern "C" fn w_glClearBufferfi(st: *mut CpuState) -> u64 {
+    let s = unsafe { &*st };
+    let f: extern "C" fn(u32, i32, f32, i32) =
+        unsafe { std::mem::transmute(gles_sym("glClearBufferfi")) };
+    unsafe { f(gs_x(s, 0) as u32, gs_x(s, 1) as i32, gs_f(s, 0), gs_x(s, 2) as i32) };
+    gles_ret!(s)
+}
+
 /// glUniformNf(GLint location, float...): location in x0, the floats in s1..sN.
 extern "C" fn w_glUniform1f(st: *mut CpuState) -> u64 {
     let s = unsafe { &*st };
@@ -737,6 +751,7 @@ fn gles_mixed_wrapper(name: &str) -> Option<HostGlesCall> {
         "glClearColor" => w_glClearColor as H,
         "glBlendColor" => w_glBlendColor as H,
         "glClearDepthf" => w_glClearDepthf as H,
+        "glClearBufferfi" => w_glClearBufferfi as H,
         "glDepthRangef" => w_glDepthRangef as H,
         "glLineWidth" => w_glLineWidth as H,
         "glPolygonOffset" => w_glPolygonOffset as H,
@@ -1836,6 +1851,36 @@ mod tests {
                 "{n} should not be mixed-wrapped"
             );
         }
+    }
+
+    #[test]
+    fn resolve_gles_mixed_clearbufferfi_is_mixed_abi_not_int() {
+        // Regression (SH36): the real engine's clear-state sub-fn 0x5b32e08
+        // dispatches slot 3 (guest BSS 0x106d3b2f0+8*3 = 0x106d3b308) through the
+        // stub 0x5b3a1e4 as `glClearBufferfi(GLenum buffer, GLint drawbuffer,
+        // GLfloat depth, GLint stencil)` — the per-buffer COMBINED depth+stencil
+        // clear (0x84F9=GL_DEPTH_STENCIL). The real call site 0x5b32ef4 loads
+        // `ldr s0,[x21,#68]` (depth, first FP arg -> s0), `ldr w2,[x21,#72]`
+        // (stencil), `mov w0,#0x84f9`, `mov w1,wzr`. Because depth is a float,
+        // glClearBufferfi is a MIXED-ABI function (float in s0 + 3 int/ptr), so:
+        //  - resolve_gles_mixed MUST register it (so w_eglGetProcAddress returns a
+        //    dispatchable float-shaped bridge slot -- it CANNOT go through the
+        //    integer HostCall, which only marshals x-regs and would drop the s0
+        //    depth, mis-clearing the depth attachment).
+        //  - resolve_gles_int MUST reject it (float ABI), so the fallback chain in
+        //    resolve_egl_get_proc_address correctly keeps the mixed slot.
+        // The pre-SH36 seed used glClearStencil (single-int-ABI) for slot 3 -- that
+        // mis-routes a GL_DEPTH_STENCIL dispatch (a float depth in s0 would be
+        // ignored, and none of the 3 int args decoded as a color/stencil mask).
+        let nm = b"glClearBufferfi\0";
+        let mixed = resolve_gles_mixed(nm)
+            .unwrap_or_else(|| panic!("glClearBufferfi must resolve via the mixed (float) bridge"));
+        eprintln!("resolve_gles_mixed(glClearBufferfi\\0) -> mixed bridge slot {mixed:#x}");
+        assert!(mixed >= crate::jit::HOST_THUNK_BASE, "slot is a real dispatchable host thunk");
+        assert!(
+            resolve_gles_int(nm).is_none(),
+            "glClearBufferfi has a float s0 arg -> must be rejected by the int bridge"
+        );
     }
 
     #[test]

@@ -2002,7 +2002,7 @@ fn main() {
                             (0, "glDrawBuffers"),
                             (1, "glClearBufferiv"),
                             (2, "glClearBufferfv"),
-                            (3, "glClearStencil"),
+                            (3, "glClearBufferfi"),
                             (4, "glColorMask"),
                             (5, "glDepthMask"),
                             (6, "glStencilMask"),
