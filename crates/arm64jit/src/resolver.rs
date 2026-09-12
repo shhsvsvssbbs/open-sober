@@ -390,6 +390,7 @@ pub const GLES_INT_NAME_LIST: &[&[u8]] = &[
     b"glUniformBlockBinding\0",
     b"glUseProgram\0",
     b"glValidateProgram\0",
+    b"glVertexAttribDivisor\0",
     b"glVertexAttribPointer\0",
     b"glViewport\0",
 ];
@@ -2033,6 +2034,7 @@ mod tests {
         const GL_UNIFORM_BUFFER: u64 = 0x8A11;
         const GL_DYNAMIC_DRAW: u64 = 0x88E8;
         const GL_TRIANGLES: u64 = 0x0004;
+        const GL_ARRAY_BUFFER: u64 = 0x8892;
         let mut st = CpuState::new();
         let dpy = gcall(egl_getdisplay, &mut st);
         assert_ne!(dpy, 0);
@@ -2121,6 +2123,61 @@ mod tests {
         st.x[0] = 0;
         let e = gcall(gl_get_error, &mut st);
         assert_eq!(e, 0, "glDrawArraysInstanced through sealed slot10 must be GL_NO_ERROR (got {e:#x})");
+        // Per-instance vertex-attribute divisor (SH48): a real instanced mesh sets
+        // glVertexAttribDivisor(index, 1) on the per-instance buffer; without it every
+        // instance reads instance 0's data. This was ABSENT from GLES_INT_NAME_LIST,
+        // so the engine's instanced draw fell to the NULL/0 stub (duplicated instance
+        // 0). Bind a real vertex buffer to attrib 0, set divisor 1, and issue a
+        // NON-empty instanced draw (count=1, 4 instances) so the sealed slot executes
+        // a real command, not just the count=0 probe.
+        let gl_vertex_attrib_divisor = resolve_gles_int(b"glVertexAttribDivisor\0")
+            .expect("glVertexAttribDivisor resolves via int bridge (SH48)");
+        let gl_bind_attrib = resolve_gles_int(b"glEnableVertexAttribArray\0")
+            .expect("glEnableVertexAttribArray resolves");
+        let gl_attrib_ptr = resolve_gles_int(b"glVertexAttribPointer\0")
+            .expect("glVertexAttribPointer resolves");
+        let gl_bind_buffer = resolve_gles_int(b"glBindBuffer\0").expect("glBindBuffer resolves");
+        // A real vertex buffer for attrib 0 (4 vec4s: enough for 4 instances of a
+        // tri-quad primitive).
+        let mut vbuf = 0u32;
+        st.x[0] = 1;
+        st.x[1] = (&mut vbuf) as *mut u32 as u64;
+        gcall(gl_gen_buffers, &mut st);
+        assert_ne!(vbuf, 0, "glGenBuffers produced a vertex buffer id");
+        let verts: [u8; 64] = [0u8; 64];
+        st.x[0] = GL_ARRAY_BUFFER; // 0x8892
+        st.x[1] = vbuf as u64;
+        gcall(gl_bind_buffer, &mut st);
+        st.x[0] = GL_ARRAY_BUFFER;
+        st.x[1] = 64;
+        st.x[2] = (&verts[0]) as *const u8 as u64;
+        st.x[3] = GL_DYNAMIC_DRAW;
+        gcall(gl_buffer_data, &mut st);
+        // Enable attrib 0 at the format table, then set divisor 1 (per-instance).
+        st.x[0] = 0;
+        gcall(gl_bind_attrib, &mut st);
+        st.x[0] = 0; // index
+        st.x[1] = 4; // size (vec4)
+        st.x[2] = 0x1406; // GL_FLOAT
+        st.x[3] = 0; // normalized
+        st.x[4] = 16; // stride
+        st.x[5] = 0; // offset
+        gcall(gl_attrib_ptr, &mut st);
+        st.x[0] = 0; // index
+        st.x[1] = 1; // divisor -> per-instance
+        gcall(gl_vertex_attrib_divisor, &mut st);
+        st.x[0] = 0;
+        let e = gcall(gl_get_error, &mut st);
+        assert_eq!(e, 0, "glVertexAttribDivisor(index=0, divisor=1) must be GL_NO_ERROR (got {e:#x})");
+        // Non-empty instanced draw through the sealed slot (count=1, 4 instances).
+        st.x[0] = GL_TRIANGLES;
+        st.x[1] = 0;
+        st.x[2] = 1;
+        st.x[3] = 4;
+        gcall(gl_draw_arrays_instanced, &mut st); // SLOT10, now a real draw
+        st.x[0] = 0;
+        let e = gcall(gl_get_error, &mut st);
+        assert_eq!(e, 0, "non-empty glDrawArraysInstanced(count=1,vcount=4) with divisor must be GL_NO_ERROR (got {e:#x})");
     }
 
     #[test]
@@ -2168,6 +2225,12 @@ mod tests {
             // instanced draws (SH28 slots 9/10 at init)
             "glDrawElementsInstanced",
             "glDrawArraysInstanced",
+            // per-instance vertex-attribute divisor (SLOT4-adjacent int ABI): a real
+            // instanced mesh must set attrib-divisor 1 on the per-instance buffer,
+            // else every instance reads instance 0's data. Was absent from the
+            // whitelist (SH48-discovered) so the engine's instanced draw fell to the
+            // NULL/0 stub and duplicated instance 0.
+            "glVertexAttribDivisor",
             // program binary (SH28 slots 13-15)
             "glGetProgramBinary",
             "glProgramBinary",
@@ -2181,6 +2244,36 @@ mod tests {
             assert!(
                 resolve_gles_mixed(nm.as_bytes()).is_none(),
                 "{n} should not be mixed-wrapped"
+            );
+        }
+    }
+
+    #[test]
+    fn gl_vertex_attrib_divisor_resolves_via_int_bridge_only_for_instancing() {
+        // Regression (SH48): the real client's instanced-mesh pipeline must set a
+        // per-instance vertex-attribute divisor (glVertexAttribDivisor(index, n>0))
+        // on the attribute that varies per instance — otherwise every instance reads
+        // instance 0's data and the draw is a single duplicated triangle. This was
+        // ABSENT from GLES_INT_NAME_LIST (only glDraw{Arrays,Elements}Instanced were
+        // whitelisted in SH35), so a guest `br` through the engine's slot resolves to
+        // NULL/0 and the instanced path silently degenerates to instance 0. Assert:
+        //   - it resolves via the INTEGER bridge with a trailing NUL (as elfjit and
+        //     w_eglGetProcAddress pass names),
+        //   - it is REJECTED by the float/mixed wrapper (pure int ABI),
+        //   - glVertexAttribPointer + glEnableVertexAttribArray (its companions in
+        //     the per-instance setup) also resolve through the int bridge.
+        for n in [
+            "glVertexAttribDivisor",
+            "glVertexAttribPointer",
+            "glEnableVertexAttribArray",
+        ] {
+            let nm = format!("{n}\0");
+            let in_ = resolve_gles_int(nm.as_bytes())
+                .unwrap_or_else(|| panic!("{n} NOT resolvable via int bridge (instancing setup)"));
+            eprintln!("resolve_gles_int({n}\\0) -> int bridge slot {in_:#x}");
+            assert!(
+                resolve_gles_mixed(nm.as_bytes()).is_none(),
+                "{n} should not be mixed-wrapped (pure int ABI)"
             );
         }
     }

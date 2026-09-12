@@ -1,5 +1,23 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH48) — the engine's instanced-mesh pipeline is no longer NULL-bound: `glVertexAttribDivisor` joins the GLES int bridge, and the SH37 instanced gate is extended from a no-op count=0 draw probe to a real non-empty instanced draw (count=1, 4 instances) with a bound VBO + divisor 1 against real Mesa. Workspace 495/0 (was 494/0, +1). Doc docs/frontier-sh48-instanced-divisor.md.
+
+A real instanced mesh must call `glVertexAttribDivisor(index, n>0)` to mark the
+per-instance attribute; that name was absent from `GLES_INT_NAME_LIST` (SH35 only
+whitelisted the two *draw* functions), so a guest `br` through the engine's slot
+resolved to NULL/0 and every instance read instance 0's data — the instanced draw
+silently degenerated to one duplicated triangle (no crash, wrong output). This
+cycle adds `glVertexAttribDivisor` to the int bridge (auto-heals the engine's
+eglGetProcAddress-built table — no harness re-seed), extends the SH37 functional
+gate to a real non-empty instanced draw with a bound VBO + divisor 1, and adds a
+focused regression pinning it (with its setup companions `glVertexAttribPointer` +
+`glEnableVertexAttribArray`) resolves via int bridge and is rejected by mixed.
+Productized real-boot baseline re-verified: triangle + textured quad
+(BL=RED/BR=GREEN/TR=WHITE/TL=BLUE) + 3 quad-loop frames, swap Ok(0x1), exit 124.
+The standing structural wall is unchanged (SH14/SH46): the type-4 producer vector
+`[0x6829ea8]` is populated only by real Android framework glue, absent headlessly,
+so frames remain harness-driven.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH47) — closed the last NULL-dispatch gap in the engine's real GLES render table: GL4/extension slots 11/12 (glBufferStorage/glMapBuffer/glQueryCounter/glObjectLabelKHR et al.) now resolve via a desktop-libGL fallback. Workspace 494/0 (was 493/0). Doc docs/frontier-sh47-gles4-desktop-fallback.md.
 
 The engine's own render dispatch table (BSS `0x106d3b2f0 + 8*N`, built via

@@ -1,5 +1,22 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH48 (Sep 12, 2026): added the missing per-instance vertex-attribute divisor to the GLES int bridge and turned the SH37 instanced gate from a count=0 no-op probe into a real non-empty instanced draw. Workspace **495/0** (was 494/0, +1). Doc frontier-sh48-instanced-divisor.md.
+
+The engine's instanced-mesh path was one function short of working: SH35 sealed
+glDraw{Arrays,Elements}Instanced but NOT glVertexAttribDivisor, so a guest `br`
+through the engine's slot resolved to NULL/0 and every instance read instance 0's
+data. Added the name to GLES_INT_NAME_LIST (pure int ABI); the eglGetProcAddress-
+built engine table auto-heals. Extended the SH37 functional gate to bind a real
+VBO, set divisor 1, and issue glDrawArraysInstanced(GL_TRIANGLES,0,1,4) —
+GL_NO_ERROR through the sealed slot. New regression
+gl_vertex_attrib_divisor_resolves_via_int_bridge_only_for_instancing pins it.
+Productized real-boot baseline re-verified: triangle + textured quad
+(BL=RED/BR=GREEN/TR=WHITE/TL=BLUE) + 3 quad-loop frames, swap Ok(0x1), exit 124.
+
+Standing structural wall unchanged (SH14/SH46): type-4 producer vector [0x6829ea8]
+is populated only by real Android framework glue, absent headlessly, so frames
+remain harness-driven on the live engine context.
+
 ## SH46 (Sep 12, 2026): DISPROVED SH45's LSM-seed hypothesis for the bare-`--startapp` `RBX::json::Writer string length overflow` abort — the leaked "length" is the guest STACK POINTER (== sp or sp−0x30), an uninitialized guest stack std::string in StartApp's json serialization of launch params, NOT the harness-seeded LSM map (~0x260–0x2a0 MB away). Also proved the type-4 task vector `0x6829ea8` has NO in-code install site (framework-glue only). Workspace 493/0 (was 491/0). Doc frontier-sh46-json-abort-sp-disproof.md.
 
 Per SH45's frontier doc the proposed next lever was "make the seeded LSM
