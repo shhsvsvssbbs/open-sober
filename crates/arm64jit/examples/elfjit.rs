@@ -788,6 +788,63 @@ fn main() {
                 eprintln!("[elfjit:v2boot] ladder done; final [0x106829ea8] = {:#x}", dw(BSS_TASKV4));
             });
         }
+        // --v2boot-r246: the sequential --v2boot driver STALLS at rung 1 because
+        // nativeGameGlobalInit parks without returning (SH54/SH55), so rungs 2-6
+        // were NEVER exercised headlessly. A concurrent rung-1 thread is unsafe
+        // (each top-level jit_run clears the block cache mid-other-thread). This
+        // probe instead drives rungs 2-6 + V1 SEQUENTIALLY with NO GlobalInit and
+        // NO extra threads, dumping the type-4 producer vector after each — a safe
+        // test of whether any later bridge native alone installs it. Opt-in.
+        if std::env::args().any(|a| a == "--v2boot-r246") {
+            const BSS_TASKV4: u64 = 0x106829ea8;
+            let boot_sp = st.x[31];
+            let tpidr = arm64jit::jit::current_guest_tp();
+            let ib = base;
+            let iimg = image;
+            let (env_ptr, _vm) = arm64jit::jni::build_jni();
+            let thiz = arm64jit::jni::new_fake_object(); // Activity jobject
+            let init_params = arm64jit::jni::new_fake_object(); // AutoValue InitParams
+            let start_params = arm64jit::jni::new_fake_object(); // AutoValue StartAppParams
+            let bg_name = arm64jit::jni::new_string_utf_handle(b"ASMA.start");
+            let dw = |a: u64| -> u64 {
+                if a >= 0x100000000 && a >> 56 == 0 && a & 7 == 0 { unsafe { *(a as *const u64) } } else { 0 }
+            };
+            let dump = |label: &str| {
+                eprintln!("[elfjit:v2boot-r246] {label}: [0x106829ea8] = {:#x}", dw(BSS_TASKV4));
+            };
+            dump("r246-start");
+            let rungs: [(&str, u64, [u64; 8]); 4] = [
+                ("nativeUpdateAdapterInit", 0x10221c3ec, [env_ptr, thiz, 0, 0, 0, 0, 0, 0]),
+                ("setTaskSchedulerBM(false)", 0x102bb2380, [env_ptr, thiz, 0, bg_name, 0, 0, 0, 0]),
+                ("V2InitWithParams", 0x102365c54, [env_ptr, thiz, init_params, 0, 0, 0, 0, 0]),
+                ("StartLuaAppDM", 0x1023efe2c, [env_ptr, thiz, 0, 0, 0, 0, 0, 0]),
+            ];
+            for (name, guest, args) in &rungs {
+                eprintln!("[elfjit:v2boot-r246] driving {name} @ guest {guest:#x}");
+                let mut s = arm64jit::jit::CpuState::new();
+                s.tpidr = tpidr;
+                s.x[31] = boot_sp;
+                s.x[..8].copy_from_slice(args);
+                match arm64jit::jit::jit_run(iimg, ib, *guest, &mut s as *mut CpuState) {
+                    Err(e) => eprintln!("[elfjit:v2boot-r246] {name} stopped: {e}"),
+                    Ok(r) => eprintln!("[elfjit:v2boot-r246] {name} returned Ok({r:#x})"),
+                }
+                dump(name);
+            }
+            eprintln!("[elfjit:v2boot-r246] driving V2StartAppWithParams");
+            let mut sv = arm64jit::jit::CpuState::new();
+            sv.tpidr = tpidr;
+            sv.x[31] = boot_sp;
+            sv.x[0] = env_ptr;
+            sv.x[1] = thiz;
+            sv.x[2] = start_params;
+            match arm64jit::jit::jit_run(iimg, ib, 0x10258b144, &mut sv as *mut CpuState) {
+                Err(e) => eprintln!("[elfjit:v2boot-r246] V2StartAppWithParams stopped: {e}"),
+                Ok(r) => eprintln!("[elfjit:v2boot-r246] V2StartAppWithParams returned Ok({r:#x})"),
+            }
+            dump("V2StartAppWithParams");
+            eprintln!("[elfjit:v2boot-r246] ladder done; final [0x106829ea8] = {:#x}", dw(BSS_TASKV4));
+        }
         let mut s2 = arm64jit::jit::CpuState::new();
         s2.tpidr = arm64jit::jit::current_guest_tp();
         // Continue on the boot-phase guest stack (real SP), not a fresh 0 —

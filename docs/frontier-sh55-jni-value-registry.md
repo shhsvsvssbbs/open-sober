@@ -61,12 +61,23 @@ Ran the full stable productized recipe + `--v2boot` on the real `libroblox.so`
   StartLuaAppDM, V2StartAppWithParams) never run on the detached driver thread, and
   `[0x106829ea8]` stays **0** throughout.
 
-This is the same wall SH54 saw — but SH54 measured it DURING GlobalInit with only the
-partial registry. Now measured with the full Call{Object,Boolean,Int,Long,Float} registry
-(so StartApp's serialization would have real values), the ladder STILL cannot reach the
-install site. It re-confirms the recon Task-1 (rigorous, APS2) verdict at runtime with the
-params layer complete: the ordered-ladder reframe does not populate the type-4 producer
-vector headlessly.
+### Closing the "drive the ladder in order" path empirically (all three angles)
+Because SH55's stall meant rungs 2–6 were NEVER headlessly exercised, two more probes
+(as a `--v2boot-r246` harness diagnostic) attempted to reach them:
+- **Concurrent rung-1 (a `--v2boot-async` attempt):** spawning `nativeGameGlobalInit` on its
+  own thread faulted the whole process (SIGABRT) — each top-level `jit_run` runs
+  `clear_block_cache()` at entry, corrupting another thread's in-flight translation. The
+  JIT's global block cache makes concurrent top-level guest entries unsafe. (*Removed.*)
+- **Skip GlobalInit, drive rungs 2–6 + V1 sequentially** (`--v2boot-r246`, runs/sh55-v2boot-r246.txt):
+  `nativeUpdateAdapterInit` (rung 2) **NULL-faulted at guest 0x10221d7a8** immediately.
+  Rungs 2–6 genuinely depend on state `nativeGameGlobalInit` creates, so they cannot run
+  before it, and it never returns.
+
+So the ordered-ladder reframe is now empirically closed on three independent grounds:
+(1) sequential stalls forever at rung 1; (2) concurrent is unsafe under the JIT's block cache;
+(3) skipping rung 1 NULL-faults rung 2. Combined with the SH53 rigorous Task-1 disproof
+(no in-image install site), the only live mechanism for the type-4 plane stays the host seed
+`--taskv4-seed` + `--deque-node-live`.
 
 ## Standing structural wall (unchanged)
 The type-4 producer vector `[0x106829ea8]` is framework-glue-seeded only — no in-image
