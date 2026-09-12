@@ -1,5 +1,35 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH50) — closed the LAST two NULL-dispatch slots in the engine's real GLES render table: the plain (non-EXT) GL_EXT_debug_marker names `glPushGroupMarker`/`glPopGroupMarker` now resolve via an EXT-sibling fallback and become real dispatchable bridge slots. Workspace 496/0 (was 495/0, +1). Doc docs/frontier-sh50-marker-names-ext-fallback.md.
+
+JIT_EGL_LOG (SH47) left exactly two `UNRESOLVED` eglGetProcAddress names:
+`glPushGroupMarker`/`glPopGroupMarker` (non-EXT spelling). They ARE in
+GLES_INT_NAME_LIST but resolve_gles_int required the exact symbol, and both
+Mesa libraries export ONLY the EXT-suffixed spellings (`glPushGroupMarkerEXT` /
+`glPopGroupMarkerEXT`, verified via nm); a guest `br` through the engine's
+dispatch-table slot for these names would have jumped to NULL (SH19/SH24/SH47
+crash class, applied to the two names that cycle never reached).
+
+- **Fix (resolver.rs):** when a whitelisted name is NULL in both libs and does
+  not end in `EXT`, fall back to `{name}EXT` (itself whitelisted, int-ABI-safe)
+  against GLESv2 then libGL. Both plain names now resolve to real bridge slots.
+- **New regression** `plain_non_ext_marker_names_resolve_via_int_bridge_ext_sibling_fallback`
+  (all 4 spellings resolve via int bridge, bridge-pointer slots, rejected by
+  mixed). Workspace 496/0 (+1).
+- **Productized re-verify** (runs/sh50-product-reverify.txt): `open-sober play
+  --apk roblox-android.apk --jit` exit 124 stable, real indexed triangle
+  (centroid RGBA(255,0,0,255)) + textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE)
+  + 6 fresh quad-loop frames, swaps Ok(0x1), **zero** eglGetProcAddress
+  UNRESOLVED marker lines.
+- The direct-elfjit `--renderinit` SIGABRT (right after ANativeWindow wiring) is
+  confirmed PRE-EXISTING (aborts identically with this change stashed) — the
+  documented SH46 harness-bootstrap artifact, before this cycle's code path.
+
+Standing structural wall unchanged (SH14/SH46/SH49): the type-4 producer vector
+`[0x6829ea8]` remains framework-glue-installed only, so the engine still does
+not self-produce a frame — frames stay harness-driven on the live engine
+context.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH49) — the type-4 task-dispatch plane is now SUSTAINABLE: the `--deque-node-live` injector stops re-evicting the drain's translated block, so inject+pop+dispatch runs 197 consecutive pops with zero crash (SH44 faulted at pop #39). Workspace 495/0 (unchanged). Doc docs/frontier-sh49-taskv4-sustain.md, artifact runs/sh49-taskv4-sustain.txt.
 
 SH44 proved the type-4 popped-task dispatch plane (`[0x6829ea8]`) is functional

@@ -480,6 +480,27 @@ pub fn resolve_gles_int(name: &[u8]) -> Option<u64> {
     } else {
         ptr
     };
+    // Plain (non-EXT) marker-group names: the engine requests glPushGroupMarker /
+    // glPopGroupMarker (GL_EXT_debug_marker without the EXT suffix), but BOTH
+    // Mesa libraries export ONLY the EXT-suffixed spellings
+    // (glPushGroupMarkerEXT / glPopGroupMarkerEXT). Since the very next step is
+    // the string → CArray map (`sym_from`), the GCC "asm\" name can't alias the
+    // plain name; there is no other source. Rather than return NULL (a guest
+    // `br` through the engine's render dispatch-table slot 11/12 for these names
+    // would jump to 0 — the SH19/SH24/SH47 NULL-dispatch crash class), fall back
+    // to the EXT-suffixed sibling, which is a WHITELISTED name in
+    // GLES_INT_NAME_LIST and thus verified integer-ABI safe.
+    let ptr = if ptr.is_null() && !ns.ends_with("EXT") {
+        let key_ext = CString::new(format!("{ns}EXT")).ok()?;
+        let dh = gl_desktop_handle();
+        let mh = gles_handle();
+        let mut s: *mut libc::c_void = std::ptr::null_mut();
+        if !mh.is_null() { s = unsafe { sym_from(mh, key_ext.as_ptr()) } }
+        if s.is_null() && !dh.is_null() { s = unsafe { sym_from(dh, key_ext.as_ptr()) } }
+        s
+    } else {
+        ptr
+    };
     if ptr.is_null() { return None; }
     let hostf: HostCall = unsafe { std::mem::transmute(ptr) };
     let mut r = resolver().lock().unwrap();
@@ -1951,6 +1972,37 @@ mod tests {
         // At least the desktop-exported subset must resolve; libGL.so.1 exports all
         // but the two un-EXT-suffixed marker names.
         assert!(resolved >= 13, "expected most names to resolve, got {resolved}/{unresolved}");
+    }
+
+    #[test]
+    fn plain_non_ext_marker_names_resolve_via_int_bridge_ext_sibling_fallback() {
+        // Regression (SH50): the engine requests the PLAIN (non-EXT) debug-marker
+        // names glPushGroupMarker / glPopGroupMarker (GL_EXT_debug_marker without
+        // the EXT suffix), but BOTH Mesa libraries export ONLY the EXT-suffixed
+        // spellings (glPushGroupMarkerEXT / glPopGroupMarkerEXT). Before this
+        // cycle resolve_gles_int returned None for the plain names even though
+        // they were in GLES_INT_NAME_LIST, so a guest `br` through the engine's
+        // render dispatch-table slot 11/12 for these names would jump to NULL —
+        // the SH19/SH24/SH47 NULL-dispatch crash class kept open by the two names
+        // JIT_EGL_LOG still reported as UNRESOLVED. resolve_gles_int now falls
+        // back to the EXT-suffixed sibling (a whitelisted, integer-ABI-safe name)
+        // so the plain names become real dispatchable bridge slots.
+        //
+        // Verify: both plain names AND their EXT siblings resolve via the integer
+        // bridge (trailing-NUL form, as eglGetProcAddress passes them), and none
+        // is routed through the mixed (float) bridge (pure int/ptr ABI).
+        let mut resolved = 0;
+        for n in ["glPushGroupMarker", "glPushGroupMarkerEXT", "glPopGroupMarker", "glPopGroupMarkerEXT"] {
+            let nm = format!("{n}\0");
+            let slot = resolve_gles_int(nm.as_bytes())
+                .unwrap_or_else(|| panic!("{n} must resolve via int bridge (EXT-sibling fallback)"));
+            eprintln!("resolve_gles_int({n}\\0) -> slot {slot:#x}");
+            let addr = slot & 0xffff_ffff_0000_0000;
+            assert!(addr != 0, "{n} resolved to a non-bridge pointer");
+            assert!(resolve_gles_mixed(nm.as_bytes()).is_none(), "{n} should not be mixed");
+            resolved += 1;
+        }
+        assert_eq!(resolved, 4, "all four marker names must resolve");
     }
 
     #[test]
