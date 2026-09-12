@@ -1,5 +1,14 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH53) — DISPROVED the 2026-09-12 recon's reframe that the type-4 producer vector `[0x106829ea8]` is installed IN-IMAGE by TaskScheduler/V2-init code SH46 "never reached". Workspace **497/0** (unchanged). Commits 277f567, 9694a19 (doc). Doc docs/frontier-sh53-recon-disproof.md.
+
+A recon (docs/recon-framework-boot-order.md + /home/hermes-worker/open-sober-framework-glue-spec.md) claimed the ~50-cycle wall was wrong: SH46's "no in-code store" was because the scan ran on a bare boot that never reaches TaskScheduler init, and driving the real V2 ladder (`nativeGameGlobalInit → nativeUpdateAdapterInit → V2InitWithParams → StartLuaAppDM → [Surface] → StartAppWithParams`) in order would populate the vector. Disproven on two independent grounds:
+
+1. **SH46's scan is STATIC** (whole `.text`) — execution-independent, so "never reached init" cannot explain a missing in-image store. If in-image init installed the vector, some decoded instruction would write 0x106829ea8.
+2. **The computed-base escape is closed.** The vector is the `.bss` base 0x6829e80 + **0x28**, so `adrp 6829000; add xN,xN,#0xe80; str [xN,#0x28]` would dodge a literal-#3752 scan. Disassembling every `adrp xN,6829000` site: 0x2953e30 writes [0x6829e80] (+0x0, clears first qword); 0x295427c/0x29542ec use 0x6829e88 (+0x8) as an atomic counter (ldxr/stxr, stlr); all other adds target #0xba8/#0xe80/#0xe88/#0xf00 — none reaches #0xea8. All `add #0xea8` sites are struct-relative on dynamic bases, never a 6829000-derived register.
+
+So no in-image (literal or computed-base) store exists. If the V2 ladder installs the vector it is via cross-module glue / host seed (consistent with SH46). Regression `type4_taskv4_vector_has_no_in_code_install_site_and_uses_static_base` extended to pin the vector's 0x28 offset within `.bss` + the computed-base disproof audit. The V2-ladder empirical drive remains open but only as a cross-module/runtime-install test, not an in-image one — priced accordingly (needs AutoValue InitParams/StartAppParams jobjects + real Surface). Workspace 497/0.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH52) — closed the real client's last 11 unresolved data imports: the `AMEDIAFORMAT_KEY_*` media-format string constants (Android libmediandk absent host-side) now bind to live host C strings. Workspace **497/0** (was 496/0, +1). Commit 4fe90da. Doc docs/frontier-sh52-media-keys-data.md, log runs/sh52-product-verify.txt.
 
 The productized boot line previously read `bound 534 JUMP_SLOT + 67 GLOB_DAT/ABS64 (0 unresolved), 11 unresolved` — 11 data-object GLOB_DAT slots that `dlsym` could not resolve (bionic/mediandk-only symbols). Now reads `... + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved`. The gap was precisely:
