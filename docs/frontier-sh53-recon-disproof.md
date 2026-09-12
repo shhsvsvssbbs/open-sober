@@ -41,6 +41,29 @@ the real binary:
 
 So neither a literal-static NOR a computed-base in-image store exists.
 
+## Corollary — the V2-ladder probe is provably futile in this harness
+
+Closed-shape argument for why the recon's "drive the real ladder and watch the
+vector populate" cannot succeed here, independent of the disassembly:
+
+- The arm64jit harness loads exactly **one guest ELF** (`libroblox.so`). Every
+  Android/mediandk/bionic library the client touches is resolved to a *host*
+  symbol (dlsym/thunk/GLES-bridge), NOT loaded as a second guest ELF the JIT
+  could execute-from-image-guest-addresses.
+- A "cross-module guest install site" therefore cannot exist in this harness:
+  there is no other guest `.text` (or guest `.bss`) to install into
+  `[0x106829ea8]` from.
+- Combined with the no-in-image-store disproof, the *only* remaining mechanism
+  to populate the vector is a **host-side seed** — which is precisely what the
+  existing `--taskv4-seed <addr>` lever already does (SH44/SH49 proved the
+  plane is live when seeded).
+- Conclusion: building the full AutoValue-ladder drive to test an "in-image or
+  cross-module installation" that cannot exist is wasted effort. If a future
+  cycle wants a self-driven frame, the productive levers are either (a) find a
+  *real host-glue* way to seed the vector with an engine guest handler, or
+  (b) the documented (SH51) objective-2b direction — exercise the client's real
+  fsmap/SQLite serialization, not the type-4 producer.
+
 ## Conclusion / frontier
 
 If the V2 ladder installs `[0x106829ea8]` at all, it is via **cross-module
