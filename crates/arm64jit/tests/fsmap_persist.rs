@@ -316,6 +316,28 @@ fn fsmap_truncate_chdir_linkat_readlinkat_resolve_through_store() {
     let host_file = root.join(FILE.trim_start_matches('/'));
     assert_eq!(std::fs::metadata(&host_file).unwrap().len(), 4, "host file not truncated");
 
+    // Reopen the file so flock + fallocate (SQLite datastore ops) can run on it.
+    let ro = cstr(FILE);
+    let fd2 = svc(
+        [
+            libc::AT_FDCWD as u64, ro.as_ptr() as u64,
+            (libc::O_RDWR) as u64, 0, 0, 0,
+        ],
+        56,
+    );
+    assert!(fd2 >= 0, "reopen for flock/fallocate failed: {fd2}");
+    let fd2 = fd2 as i32;
+    // flock(32): LOCK_EX|LOCK_NB must succeed on a real host fd.
+    let rfl = svc([fd2 as u64, (libc::LOCK_EX | libc::LOCK_NB) as u64, 0, 0, 0, 0], 32);
+    assert_eq!(rfl, 0, "flock LOCK_EX failed: {rfl}");
+    // fallocate(285): grow the 4-byte file to 4096 (FALLOC_FL_KEEP_SIZE unset).
+    let rfa = svc([fd2 as u64, 0, 4, 4092, 0, 0], 285); // fd, mode=0, offset=4, len=4092
+    assert_eq!(rfa, 0, "fallocate failed: {rfa}");
+    assert!(std::fs::metadata(&host_file).unwrap().len() >= 4096, "fallocate did not grow host file");
+    // Release the lock so later ops on the same inode are clean.
+    let _ = svc([fd2 as u64, libc::LOCK_UN as u64, 0, 0, 0, 0], 32);
+    assert_eq!(svc([fd2 as u64, 0, 0, 0, 0, 0], 57), 0);
+
     // chdir into a remapped guest dir.
     let d = cstr("/data/user/0/com.roblox.client");
     assert_eq!(svc([d.as_ptr() as u64, 0, 0, 0, 0, 0], 49), 0, "chdir failed");

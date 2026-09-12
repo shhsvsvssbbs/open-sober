@@ -1127,7 +1127,17 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         // --- file I/O durability / sizing (same semantics both arches) ---
         82 => unsafe { libc::fsync(a[0] as c_int) as c_long },
         83 => unsafe { libc::fdatasync(a[0] as c_int) as c_long },
-        45 => unsafe { libc::truncate(a[0] as *const c_char, a[1] as libc::off_t) as c_long },
+        // flock(32): advisory file locks — the SQLite datastore locks its
+        // db/shm files for read/write concurrency. Forward to the host.
+        32 => unsafe { libc::flock(a[0] as c_int, a[1] as c_int) as c_long },
+        // fallocate(285): preallocate space (SQLite + mmap-backed db files
+        // grow via it). fd, mode, offset, len.
+        285 => unsafe {
+            libc::syscall(
+                libc::SYS_fallocate, a[0] as usize, a[1] as usize,
+                a[2] as usize, a[3] as usize,
+            ) as c_long
+        },
         46 => unsafe { libc::ftruncate(a[0] as c_int, a[1] as libc::off_t) as c_long },
         // --- system memory (sysinfo 179): a game engine sizes its worker-pool
         // heaps / caches from totalram/freeram. The asm-generic `struct sysinfo`
