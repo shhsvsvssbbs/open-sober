@@ -10,3 +10,4 @@ pub mod plt;
 pub mod jni;
 pub mod boot;
 pub mod signals;
+pub mod fsmap;

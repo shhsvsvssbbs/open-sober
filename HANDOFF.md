@@ -1,5 +1,40 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH38) — closed the data-plane FS gap: guest file paths under Android's writable roots now remap to a real persistent host store, so the client's datastore/login session can persist "like the real app". Workspace 482/0 (was 479/0).
+
+New `arm64jit::fsmap` module (crates/arm64jit/src/fsmap.rs) + syscall wiring: the
+JIT's `guest_svc` was passing guest file-path pointers verbatim to host libc, so
+a real session's `/data/data/com.roblox.client/...` (datastore, shared_prefs,
+session cookie), `/sdcard/...`, `/storage/emulated/0/...`, `/cache/...` read/writes
+hit the host root and failed ENOENT/EPERM — the client could not persist anything.
+Now, when a host root is configured (`SOBER_ANDROID_ROOT` env or a test setter),
+those four writable mount roots remap to `{root}/data|storage|sdcard|cache/...`,
+and `ensure_parents` recursively scaffolds the `/data/user/0/com.roblox.client/...`
+chain so O_CREAT/mkdirat on a deep path never ENOENTs. Input-off by default (root
+unset → paths pass through), so the existing boot is untouched. Relative and
+non-writable/virtual roots (`/system`, `/proc`) are NOT remapped. Wired through
+`crate::fsmap::remap_path` + `ensure_parents` in guest_svc: openat(56),
+mkdirat(34), unlinkat(35), renameat(38), faccessat(48), fstatat(79);
+read/write/readv/writev on the fd are unchanged.
+
+Hermetic proof (crates/arm64jit/tests/fsmap_persist.rs, drives guest_svc through
+the real ABI, no APK): a write under `/data/user/0/com.roblox.client/files/
+session.dat` lands in a real host file under the root, and a *fresh* CpuState
+("restart") reopens the same guest path and reads the exact bytes back — the
+store survives a restart. 3 new regressions: cross-restart persistence, mapping
+correctness (+ negative cases: /system, /proc, relative pass through), and
+parent-dir scaffolding for mkdirat/deep O_CREAT. Real boot re-verified unchanged
+(JNI_OnLoad 0x10006, StartApp driven, stable idle main loop).
+
+**Next (closest unblocked):** this closes the data-plane persistence gap (objective
+2b enabler). The standing structural frontier is unchanged (SH14/SH37): the
+engine's own main-loop producer never enqueues a render task, so the engine
+renders what the harness drives. To turn "persistence works" into "the client
+remembers sign-in", arm a persistent SOBER_ANDROID_ROOT under the runtime's data
+dir (sober-core open-sober play / elfjit) and re-open the producer/deque wall so
+the boot enters a real session that reads/writes the now-persistent store. Doc:
+docs/frontier-sh38-fsmap-persist.md.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH37) — the SH35-sealed GLES3 pipeline slots are proven FUNCTIONAL, not just resolvable: dispatched through the engine's OWN slot stubs on the live context — program-binary round-trip, UBO bind, instanced draw. Workspace 479/0 (was 478/0). Commits a0ba81c (+8f57 ledger).
 
 New elfjit `--renderframe-progbin` drives the engine's dispatch stubs `0x5b3a1c0+0xc*N`

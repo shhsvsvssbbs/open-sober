@@ -690,6 +690,19 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         unsafe { libc::write(2, m.as_ptr() as *const libc::c_void, m.len()); }
     }
     use libc::{c_long, c_void, c_char, c_int};
+    // Resolve a guest path through the Android-root remap. Returns the host
+    // pointer to hand to libc plus the owned remap record (kept alive in the
+    // calling branch so its CString outlives the call). `create` enables
+    // parent-dir scaffolding for O_CREAT/mkdir-style opens.
+    let mappath = |p: *const c_char, create: bool| -> (*const c_char, Option<crate::fsmap::RemappedPath>) {
+        match crate::fsmap::remap_path(p) {
+            Some(rm) => {
+                crate::fsmap::ensure_parents(Some(&rm), create);
+                (rm.as_ptr(), Some(rm))
+            }
+            None => (p, None),
+        }
+    };
     // AArch64 -> host. We dispatch by AArch64 syscall number directly to the
     // matching libc call (which does the native x86-64 syscall), so the mapping
     // is exact and readable rather than a fragile number shuffle. Errors come
@@ -738,7 +751,10 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         63 => unsafe { libc::read(a[0] as c_int, a[1] as *mut c_void, a[2] as usize) as c_long },
         64 => unsafe { libc::write(a[0] as c_int, a[1] as *const c_void, a[2] as usize) as c_long },
         57 => unsafe { libc::close(a[0] as c_int) as c_long },
-        56 => unsafe { libc::openat(a[0] as c_int, a[1] as *const c_char, a[2] as c_int, a[3] as c_long as u32) as c_long },
+        56 => {
+            let (p, _keep) = mappath(a[1] as *const c_char, a[2] as i32 & libc::O_CREAT != 0);
+            unsafe { libc::openat(a[0] as c_int, p, a[2] as c_int, a[3] as c_long as u32) as c_long }
+        }
         // --- memory ---
         222 => unsafe { libc::mmap(a[0] as *mut c_void, a[1] as usize, a[2] as c_int, a[3] as c_int, a[4] as c_int, a[5] as i64) as c_long },
         226 => unsafe { libc::mprotect(a[0] as *mut c_void, a[1] as usize, a[2] as c_int) as c_long },
@@ -752,20 +768,33 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         216 => unsafe { libc::syscall(libc::SYS_mremap, a[0] as usize, a[1] as usize, a[2] as usize, a[3] as c_int, a[4] as usize) as c_long }, // (220 is clone, NOT mremap)
         // --- filesystem / directory ---
         17 => unsafe { libc::syscall(libc::SYS_getcwd, a[0] as usize, a[1] as usize) as c_long },
-        34 => unsafe { libc::mkdirat(a[0] as c_int, a[1] as *const c_char, a[2] as libc::mode_t) as c_long },
-        35 => unsafe { libc::unlinkat(a[0] as c_int, a[1] as *const c_char, a[2] as c_int) as c_long },
+        34 => {
+            let (p, _keep) = mappath(a[1] as *const c_char, true);
+            unsafe { libc::mkdirat(a[0] as c_int, p, a[2] as libc::mode_t) as c_long }
+        }
+        35 => {
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            unsafe { libc::unlinkat(a[0] as c_int, p, a[2] as c_int) as c_long }
+        }
         36 => unsafe { libc::symlinkat(a[1] as *const c_char, a[0] as c_int, a[2] as *const c_char) as c_long },
         37 => unsafe { // linkat(37)
             libc::syscall(libc::SYS_linkat, a[0] as usize, a[1] as usize, a[2] as usize, a[3] as usize, a[4] as usize) as c_long
         },
-        38 => unsafe { libc::renameat(a[0] as c_int, a[1] as *const c_char, a[2] as c_int, a[3] as *const c_char) as c_long },
+        38 => {
+            let (p1, _k1) = mappath(a[1] as *const c_char, false);
+            let (p2, _k2) = mappath(a[3] as *const c_char, false);
+            unsafe { libc::renameat(a[0] as c_int, p1, a[2] as c_int, p2) as c_long }
+        }
         158 => unsafe { // getgroups(158): count, list
             libc::getgroups(a[0] as c_int, a[1] as *mut libc::gid_t) as c_long
         },
         49 => unsafe { libc::chdir(a[0] as *const c_char) as c_long },
         61 => unsafe { libc::syscall(libc::SYS_getdents64, a[0] as c_int, a[1] as usize, a[2] as usize) as c_long },
         62 => unsafe { libc::lseek(a[0] as c_int, a[1] as i64, a[2] as c_int) as c_long },
-        48 => unsafe { libc::faccessat(libc::AT_FDCWD, a[0] as *const c_char, a[1] as c_int, 0) as c_long },
+        48 => {
+            let (p, _keep) = mappath(a[0] as *const c_char, false);
+            unsafe { libc::faccessat(libc::AT_FDCWD, p, a[1] as c_int, 0) as c_long }
+        }
         78 => unsafe { libc::syscall(libc::SYS_readlinkat, libc::AT_FDCWD as usize, a[0] as usize, a[1] as usize, a[2] as usize) as c_long },
         59 => unsafe { libc::pipe2(a[0] as *mut c_int, a[2] as c_int) as c_long },
         96 => unsafe { libc::syscall(libc::SYS_set_tid_address, a[0] as usize) as c_long },
@@ -888,7 +917,8 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         79 => { // AArch64 newfstatat (fstatat, 79)
             unsafe {
                 let mut st = core::mem::MaybeUninit::<libc::stat>::zeroed().assume_init();
-                let r = libc::fstatat(a[0] as c_int, a[1] as *const c_char, &mut st, a[3] as c_int);
+                let (p, _keep) = mappath(a[1] as *const c_char, false);
+                let r = libc::fstatat(a[0] as c_int, p, &mut st, a[3] as c_int);
                 if r == 0 {
                     write_guest_stat(a[2], &st);
                 }
