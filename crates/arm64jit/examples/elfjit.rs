@@ -236,10 +236,43 @@ fn wire_real_window() -> u64 {
     0
 }
 
+/// Arm the guest-persistence root for a real run: if `SOBER_ANDROID_ROOT` is
+/// not already set, create a stable host directory under the runtime's data
+/// dir and export it, so guest `/data`/`/sdcard`/`/cache` writes (the client's
+/// datastore / login-session store) land on persistent host disk via
+/// `arm64jit::fsmap` instead of the nonexistent host root. Verified not to
+/// disturb the boot (stable idle exit 124 with the root armed); it only gains
+/// effect when the client opens a `/data` sink.
+fn arm_persist_root() {
+    if std::env::var_os("SOBER_ANDROID_ROOT").is_some() {
+        return;
+    }
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .map(|h| h.join(".local/share"))
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let dir = data.join("open-sober").join("android-root");
+    if let Ok(()) = std::fs::create_dir_all(&dir) {
+        unsafe { std::env::set_var("SOBER_ANDROID_ROOT", &dir) };
+        println!(
+            "[fsmap] armed persistence root SOBER_ANDROID_ROOT={}",
+            dir.display()
+        );
+    } else {
+        println!("[fsmap] warn: could not create persistence root {}", dir.display());
+    }
+}
+
 fn main() {
     unsafe {
         install_fault_debug();
     }
+    arm_persist_root();
     let path = std::env::args()
         .nth(1)
         .expect("usage: elfjit <aarch64-elf> [entry-guest-addr-hex]");
