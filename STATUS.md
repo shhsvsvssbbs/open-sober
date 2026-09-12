@@ -1,5 +1,40 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH42 (Sep 12, 2026): closed the last data-plane syscall gap — vectored positional I/O + durability (preadv(69)/pwritev(70)/sync(81)) now handled in guest_svc. Workspace 488/0 (was 487/0). Commit 7351654.
+
+A real SQLite-backed session datastore flushes db/shm pages with **pwritev**
+(batched vectored positional write) and reads them back with **preadv**; it
+issues **sync(81)** (PRAGMA synchronous=FULL) before reporting a transaction
+durable. All three previously fell through to -ENOSYS — the last unhandled arm
+in the data-plane for a session store. Added beside the pread/pwrite (67/68) and
+readv/writev (65/66) arms:
+
+- preadv(69)/pwritev(70): `struct iovec` is byte-identical across aarch64/x86-64,
+  so a raw forward writes the guest iovec array in place; the aarch64 loff_t
+  pos as two syscall words (a[3]=lo, a[4]=hi) maps onto x86-64's __NR3264 form.
+- sync(81): trivial host `libc::sync()` (returns ()), 0 on success.
+
+New hermetic regression
+`fsmap_preadv_pwritev_sync_support_sqlite_durability_path` (tests/fsmap_persist.rs)
+drives the real guest_svc ABI under a configured root: pwritev writes two pages
+at distinct offsets into the store, sync returns 0 (not -ENOSYS), and after
+close+reopen preadv reads page1 back byte-exact from the store across a fresh
+fd. This completes the SQLite lifecycle data-plane: create → write → statx-exists
+→ flock → fallocate → truncate → preadv/pwritev → sync → readlink → read.
+
+Real boot re-verified through the modified dispatch (runs/sh42-boot-reverify.txt):
+exit 124 stable, real indexed triangle centroid RGBA(255,0,0,255), textured quad
+BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels, 3 fresh quad-loop frames, swap
+Ok(0x1). Baselines unchanged (--jni exit 0; stable idle exit 124).
+
+**Next (closest unblocked):** the data-plane now covers the full SQLite session-datastore
+lifecycle. The engine's own main-loop producer still never enqueues a render-task type
+(SH14 w4=4 structural cap; SH41 re-confirmed the deque-maintenance dispatch reaches real
+engine code but never a render producer), so frames are harness-driven. Two directions:
+(a) use the confirmed-live maintenance globals + --deque-node-live to probe whether a
+maintenance dispatch advances the session past idle; or (b) harden the JNI/network
+surface the client touches once a real session reads/writes its now-persistent store.
+
 ## SH41 (Sep 12, 2026): fixed a real faccessat(48) arg-order + remap bug in guest_svc (data-plane hardening for the datastore-accessibility probe), and corrected a stale documented premise (the deque-maintenance BSS globals ARE populated at runtime). Workspace 487/0 (was 486/0). Commit e08ddee.
 
 aarch64 raw `faccessat(48)` is `(dirfd, pathname, mode)` — x0=dirfd, x1=pathname,

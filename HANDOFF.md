@@ -1,5 +1,44 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH42) — closed the last data-plane syscall gap: vectored positional I/O + durability. preadv(69)/pwritev(70)/sync(81) are now handled in guest_svc (previously -ENOSYS), completing the raw-SQLite session-datastore lifecycle. Workspace 488/0 (was 487/0). Commit 7351654.
+
+Auditing the handled-syscall set against what a real SQLite-backed datastore
+touches surfaced one remaining data-plane gap (the others — flock/fallocate in
+SH40b, statx/truncate/linkat/readlinkat in SH40, openat/mkdirat/... in SH38 —
+were already closed). A session store flushes db/shm pages with **pwritev**
+(batched vectored positional write), reads them back with **preadv**, and issues
+**sync(81)** under PRAGMA synchronous=FULL before declaring a transaction
+durable. All three had fallen through to -ENOSYS, so a store doing vectored paged
+I/O failed (and an unhandled sync made a commit look non-durable).
+
+- preadv(69)/pwritev(70): `struct iovec` is byte-identical across aarch64/x86-64,
+  so a raw forward writes the guest iovec array in place; aarch64's two-word loff_t
+  pos (a[3]=lo, a[4]=hi) maps onto x86-64's __NR3264 syscall form.
+- sync(81): host `libc::sync()` — returns (), so `libc::sync(); 0 as c_long`.
+
+New hermetic regression
+`fsmap_preadv_pwritev_sync_support_sqlite_durability_path` (tests/fsmap_persist.rs)
+drives the real guest_svc ABI under a configured root: pwritev writes two pages at
+distinct offsets into the store, sync returns 0 (not -ENOSYS), and after
+close+reopen preadv reads page1 back byte-exact across a fresh fd. Data-plane is
+now end-to-end: create → write → statx-exists → flock → fallocate → truncate →
+preadv/pwritev → sync → readlink → read.
+
+Verified: cargo test 488/0 (was 487/0); build clean; real boot re-verified through
+the modified dispatch (runs/sh42-boot-reverify.txt: exit 124 stable, real indexed
+triangle centroid RGBA(255,0,0,255), textured quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE
+exact texels, 3 fresh quad-loop frames, swap Ok(0x1)). Baselines unchanged.
+
+**Next (closest unblocked):** the data-plane is complete for the SQLite session
+datastore. The standing structural wall (SH14, re-confirmed SH41) is unchanged:
+the engine's own main-loop producer never enqueues a render-task type (the w4=4
+cap), so frames are harness-driven. Two directions: (a) drive the confirmed-live
+deque-maintenance globals (0x1068262e8/300/308) via --deque-node-live and see
+whether a maintenance dispatch advances the session past idle; or (b) harden the
+JNI/network surface the client touches once a real session reads/writes its
+now-persistent store — the network (socket/TLS) and Android-framework JNI paths
+a logged-in session exercises.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH41) — fixed a real faccessat(48) arg-order + remap bug in guest_svc (aarch64 `faccessat(dirfd, pathname, mode)` — the old handler passed the dirfd as the pathname and the pathname pointer as the mode, so any guest "is my /data session file there?" datastore-accessibility probe read garbage against the host root) and corrected a stale documented premise. Workspace 487/0 (was 486/0). Commit e08ddee.
 
 SH40 completed the fsmap data-plane path coverage, but the fsmap layer is only
