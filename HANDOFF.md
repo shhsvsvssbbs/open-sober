@@ -1,5 +1,32 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH36) — sealed the LAST raw clear-dispatch gap: slot 3 (guest BSS 0x106d3b308) now resolves as glClearBufferfi through the MIXED (float) GLES bridge, not glClearStencil. Workspace 478/0 (was 477/0). Commit ea3e692.
+
+Closing the clear-path analog of SH35: disasm of the real clear-state sub-fn 0x5b32ef4
+(the per-buffer COMBINED depth+stencil clear) shows `mov w0,#0x84f9` (GL_DEPTH_STENCIL),
+`ldr s0,[x21,#68]` (depth -> s0, FIRST FP arg), `ldr w2,[x21,#72]` (stencil),
+`mov w1,wzr` (drawbuffer), then `bl 0x5b3a1e4` (the slot-3 stub: `adrp x8,6d3b000;
+ldr x3,[x8,#776]` = guest 0x106d3b308). Because depth is a FLOAT, glClearBufferfi is
+MIXED-ABI — the integer HostCall only marshals x-regs and would DROP the s0 depth. The
+pre-SH36 seed put glClearStencil (single-int) on slot 3, which mis-routes a real
+GL_DEPTH_STENCIL dispatch. Fix: new w_glClearBufferfi (AAPCS: gs_f(s,0) for the float)
+in gles_mixed_wrapper -> w_eglGetProcAddress auto-heals the engine table;
+resolve_gles_int rejects it (float ABI). elfjit seedgles slot3 glClearStencil->
+glClearBufferfi. Verified live (runs/sh36-clearbufferfi.txt): slot3 seeds to bridge
+0x7f0000018058, textured-quad/triangle draws + swaps all Ok(0x1), exact texel readbacks,
+exit 124. New regression resolve_gles_mixed_clearbufferfi_is_mixed_abi_not_int.
+Every slot a real frame can dispatch (0-15) now routes through our bridge.
+
+**Next (closest unblocked):** now that the UBO/instanced/program-binary dispatch slots
+(4-8 UBO, 9/10 instanced, 13-15 program-binary) AND the full clear map (0-3) are all
+bridge-resolved, prove the MODERN GLES3 render path live: fabricate a coherent renderer
+that binds a real UBO (glBindBufferBase slot5 + glUniformBlockBinding slot4) and draws
+an INSTANCED mesh (glDrawArraysInstanced slot10 / glDrawElementsInstanced slot9) through
+the engine's own draw wrapper, read back N distinct instances — proving a real session's
+instanced pipeline (heavy in Roblox) runs through the bridge instead of jumping
+out-of-image. This is the harness-level proof that the SH35-sealed slots are genuinely
+functional, not just resolvable.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH35) — the engine's REAL GLES3 dispatch-slot table is no longer raw-Mesa: the UBO / instanced / program-binary pipeline slots now resolve through the JIT bridge. Workspace 477/0 (was 476/0).
 
 SH28's live slot snapshot showed the engine's own GL-init fills its GLES dispatch
