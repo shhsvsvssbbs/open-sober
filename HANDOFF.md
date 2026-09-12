@@ -1,5 +1,40 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH37) — the SH35-sealed GLES3 pipeline slots are proven FUNCTIONAL, not just resolvable: dispatched through the engine's OWN slot stubs on the live context — program-binary round-trip, UBO bind, instanced draw. Workspace 479/0 (was 478/0). Commits a0ba81c (+8f57 ledger).
+
+New elfjit `--renderframe-progbin` drives the engine's dispatch stubs `0x5b3a1c0+0xc*N`
+(`adrp x8,6d3b000; ldr x3,[x8,#752+8N]; br x3` — the exact br-through-table mechanism a
+real session's frame uses) with real guest-ABI args on the live Mesa-llvmpipe context.
+ALL clean (glGetError NO_ERROR, exit 124), coexisting with the standard render path
+(geometry wrapper Ok, textured-quad exact texel readbacks, triangle draw, swaps Ok(0x1)):
+
+- slot15 glProgramParameteri(GL_PROGRAM_BINARY_RETRIEVABLE_HINT=0x8257) pre-link.
+- slot13 glGetProgramBinary -> a REAL 3498-byte Mesa binary (format 0x875f) — Mesa
+  produced a retrievable binary THROUGH the sealed slot.
+- slot14 glProgramBinary re-upload accepted (err 0x0).
+- slot5  glBindBufferBase(GL_UNIFORM_BUFFER,0,real_buf) binds a UBO (err 0x0).
+- slot10 glDrawArraysInstanced(GL_TRIANGLES,0,0,3) dispatches clean (err 0x0).
+
+Bug fixed en route: the slot-stub constants were the .so FILE vaddrs (0x5b3a...) but
+jit_run wants GUEST vaddrs → +0x100000000 (0x105b3a...); the first attempt ran
+"pc 0x5b3a274 outside image". New hermetic regression
+`sealed_gles3_ubo_and_instanced_slots_dispatch_real_mesa_clean` (surfaceless ES3 ctx:
+glBindBufferBase + glDrawArraysInstanced through resolve_gles_int -> GL_NO_ERROR).
+Live log runs/sh37-progbin-full.txt. This closes SH35's "prove they run" step: every
+dispatch slot 0-15 is now bridged AND functionally dispatchable, plus real frames
+(solid/triangle/textured-quad/grid, ETC1/ETC2/ASTC) through the engine's own geometry
+wrapper + swap.
+
+**Next (closest unblocked):** the harness has saturated the GLES dispatch surface. The
+remaining structural frontier (unchanged since SH14): the engine's own main-loop producer
+never enqueues a render task, so frames are harness-driven on a time base from a detached
+thread. Two candidate directions: (1) re-open the producer/deque wall now that the full
+render pipeline behind it is proven bridge-functional (a real self-driven frame is the
+remaining 'real session' gap); (2) product-ize: make sober-core's `open-sober play --apk
+roblox.apk` reproduce this elfjit boot (JNI_OnLoad + StartApp + render-init + frame drive)
+automatically instead of hardcoded elfjit addresses — turning the proof harness into the
+runtime's actual boots-real-binary path.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH36) — sealed the LAST raw clear-dispatch gap: slot 3 (guest BSS 0x106d3b308) now resolves as glClearBufferfi through the MIXED (float) GLES bridge, not glClearStencil. Workspace 478/0 (was 477/0). Commit ea3e692.
 
 Closing the clear-path analog of SH35: disasm of the real clear-state sub-fn 0x5b32ef4
