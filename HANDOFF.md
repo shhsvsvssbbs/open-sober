@@ -36,6 +36,13 @@ session. The only proven live dispatch plane remains `--taskv4-seed` +
 address into the seed so a sustainably-dispatched task node advances the engine
 toward its own frame/screen (which now has the assets to load).
 
+## SH57b (Sep 12, 2026, hermes-worker): LocalStorageManager.getAllocatableBytes()
+now reports the host's REAL free space (fstatvfs on SOBER_ANDROID_ROOT) instead
+of the collapsed 0 — recon-v2 flags 0 ⇒ the engine believes there's no disk and
+RbxStorage never builds its content cache (undermines objective 2b's remembered
+session cache plane). Extends the AutoValue getter regression. Workspace 502/0.
+Commit 401683c.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH56) — empirically CLOSED recon Task-2 on the real binary: the AutoValue getter-value registry (SH55) does NOT fix the StartApp json-abort — the leaked string length is params-independent (a host-mmap pointer read at the append bound-check, never touching the getter registry). Workspace **499/0** (unchanged). Doc docs/frontier-sh56-json-abort-params-independent.md, artifacts runs/sh56-{startapp-json-abort,startapp-jobject-abort,jsondump}.txt.
 
 The recon (docs/recon-framework-boot-order.md, Task-2) claims the `RBX::json::Writer
