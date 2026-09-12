@@ -8625,6 +8625,25 @@ mod fp16_and_fabd_fccmp_exec {
         // base (every other `[x,#3752]` store is struct-relative on heap/sp
         // regs). These constants pin that dead-end so future cycles don't re-derive
         // it, and identify exactly what a framework-glue seed must write.
+        // SH52 additionally ruled out the *computed-base* install A 2026-09-12
+        // recon (docs/recon-framework-boot-order.md) claimed the vector is
+        // installed IN-IMAGE by TaskScheduler/V2-init code that SH46's scan just
+        // "never reached" (a plausible-sounding reframe: guest 0x106829ea8 == the
+        // .bss array start 0x6829e80 + 0x28, so `adrp 6829000; add xN,xN,#0xe80;
+        // str [xN,#0x28]` would escape a `#3752`-literal scan). Disassembling
+        // every `adrp xN,6829000` site in the real binary disproves it:
+        //   - 0x2953e30: x19<-0x6829e80, then `str xzr,[x19]` — clears the bss
+        //     array's FIRST qword (0x6829e80), NOT [x19+0x28]=the vector.
+        //   - 0x295427c / 0x29542ec: operate on 0x6829e88 (+0x8) as an atomic
+        //     counter (ldxr/stxr, stlr) — not the vector.
+        //   - Every other adrp-6829000 `add` targets #0xba8/#0xe80/#0xe88/#0xf00;
+        //     none reaches #0xea8. All `add #0xea8` sites in the image are
+        //     struct-relative on dynamic bases (x0/x1/x2/x19/sp), never a
+        //     static-6829000-derived register.
+        // So there is no in-image literal OR computed store to the vector; if the
+        // V2 ladder installs it at all it is via cross-module glue (another loaded
+        // lib) or a host-side seed — both out of scope of an in-binary scan.
+        // See docs/frontier-sh52-media-keys-data.md §"frontier".
         const DISPATCH_ADRP_PAGE: u64 = 0x6829000; // file vaddr of `adrp x8, 6829000`
         const DISPATCH_OFF: u64 = 3752; // `ldr x3,[x8,#3752]` -> file 0x6829ea8
         const VECTOR_FILE: u64 = DISPATCH_ADRP_PAGE + DISPATCH_OFF;
@@ -8632,12 +8651,18 @@ mod fp16_and_fabd_fccmp_exec {
         // The dispatcher source is the static page (not a heap/sp-derived base), so
         // a harness seed must target the fixed guest address 0x106829ea8.
         assert_eq!(VECTOR_FILE + 0x100000000, 0x106829ea8);
+        // The vector == the .bss array base + 0x28: the only computed-base write
+        // that could reach it would be `str [base+0x28]` from a 0x6829e80-derived
+        // register. The real 0x2953e30 site uses +0x0 (and 0x295427c/2ec +0x8),
+        // neither +0x28. Pin the offsets so the disproof is auditable.
+        const VECTOR_WITHIN_BSS: u64 = 0x106829ea8 - 0x106829e80;
+        assert_eq!(VECTOR_WITHIN_BSS, 0x28);
         // Structural fact codified for future work: because the vector is installed
         // by external glue (not this binary), an in-repo search for a guest store
         // to 0x106829ea8 comes back empty — the world where we "reverse what the
         // framework installs in-code" does not exist.
         eprintln!(
-            "[abi] type4 vector [0x106829ea8] (file 0x{0:x}): static-base dispatcher read, no in-code store — framework-glue seeded only",
+            "[abi] type4 vector [0x106829ea8] (file 0x{0:x}): static-base + computed-base stores both ruled out (only [0x6829e80]/[0x6829e88] touched, never +0x28) — external-glue seeded only",
             VECTOR_FILE
         );
     }
