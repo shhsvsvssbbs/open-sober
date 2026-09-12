@@ -27,6 +27,11 @@ resolver, not `guest_svc`. This cycle proves the whole DNS→socket→byte plane
 7. The chain is freed through the guest's own `freeaddrinfo` import (no leak on the
    resolution path).
 
+The client also imports the legacy `gethostbyname` path; SH43b adds a sibling regression
+proving it returns a static thread-local `hostent` (h_addrtype@16/h_length@20/h_addr_list@24)
+walkable to an AF_INET 127.0.0.1 — a differently-shaped result than getaddrinfo, so both
+resolution shapes a session might use are covered. (Workspace 491/0.)
+
 ## Why it matters
 
 Section objective 1.a/2 (drive the whole real client as a usable headless session):
