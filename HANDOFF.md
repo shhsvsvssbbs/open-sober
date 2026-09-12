@@ -1,5 +1,46 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH43) — proved the guest DNS plane end-to-end through the real guest ABI: `getaddrinfo("localhost") → ai_addr → connect(203) → sendto → recvfrom` roundtrips a login payload to a real host TCP peer, then frees via the guest's own freeaddrinfo. Workspace 490/0 (was 489/0). Commit 23f4ff4.
+
+A logged-in session's FIRST network action is hostname resolution — `getaddrinfo` —
+BEFORE any connect. SH42b proved socket/connect/sendto/recvfrom only against a
+hardcoded loopback IP; the resolution step was unproven. `getaddrinfo` is a libc
+JUMP_SLOT import the resolver binds to HOST glibc via `dlsym` (not a raw syscall), so
+the plane rides the resolver (not `guest_svc`).
+
+The new hermetic regression `guest_dns_getaddrinfo_resolves_hostname_then_connect_roundtrip`
+(crates/arm64jit/src/resolver.rs) resolves the getaddrinfo/freeaddrinfo slots, drives a
+guest `blr x16` to the getaddrinfo slot with (node="localhost", service=<live-port>,
+hints=NULL, &res), walks the returned aarch64-LP64 addrinfo chain (ai_family@4,
+ai_addrlen@16, ai_addr@24, ai_next@40), asserts localhost resolves to an AF_INET
+sockaddr that is exactly 127.0.0.1, feeds ai_addr/ai_addrlen into guest_svc
+socket(198)/connect(203), roundtrips a login payload to a real host TCP listener (gets
+PONG back, peer asserts exact bytes), and frees the chain via the guest's own
+freeaddrinfo import. This closes the last gap between "the socket plane works" and "a
+logged-in session can reach a real Roblox API host": resolution → connect → byte
+roundtrip all drop-through.
+
+Also RE-VERIFIED the productized deliverable on current HEAD (runs/sh43-play-jit.txt):
+`open-sober play --apk roblox-android.apk --jit` extracts the REAL libroblox.so from
+the APK and drives JNI_OnLoad(0x2173ff4) → StartApp(0x258b144) → render-init thunk →
+the engine's own frame/geometry path through the JIT GLES bridge — real indexed
+glDrawElements triangle (centroid RGBA(255,0,0,255)), textured quad
+(BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels), 6 fresh quad-loop frames, every
+post-draw swap Ok(0x1), exit 124 stable. Boot is fully-wired: 534 JUMP_SLOT bound
+(0 unbound), zero ENOSYS/unhandled hostcalls across the full run.
+
+**Next (closest unblocked):** network (SH42b) + data (SH42) + DNS (SH43) planes are all
+proven through the real ABI. The standing structural wall is unchanged (~30 cycles):
+the engine's own main-loop producer never enqueues a render-task type (the `w4=4`
+maintenance cap steering framework-owned deque globals that are thin TLS-upkeep, not
+session producers — SH14/SH41/SH42). `--deque-node-live` (SH13) confirms maintenance
+dispatch executes real engine code but never reaches egl/gl, and the engine's idle is
+the per-CPU task-deque futex (SH39b: ALooper/GameActivity glue loop never entered).
+Frames remain harness-driven on the live engine context. A GPU host is the documented
+environment for the final self-driven-login / frame-performance proof
+(GRAPHICS_RECOMMENDATION.md), deferred (per user preference) until frame/performance
+evidence is gathered headlessly here.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH42b) — proved the CLIENT-side network plane end-to-end through the real `guest_svc` ABI: socket(198)→connect(203)→sendto(206)→recvfrom(207)→close roundtrip a login payload to a REAL host TCP peer on loopback. Workspace 489/0 (was 488/0). Commit 5cc3dd8.
 
 The pre-existing `socketpair(199)+sendmsg/recvmsg` test only covers a

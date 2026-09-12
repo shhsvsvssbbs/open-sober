@@ -1,5 +1,34 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH43 (Sep 12, 2026): prove the guest DNS plane through the real ABI — `getaddrinfo("localhost") → ai_addr → connect → send/recv` roundtrip to a real host TCP peer. Workspace 490/0 (was 489/0). Commit 23f4ff4.
+
+A logged-in session's FIRST network action is hostname resolution (`getaddrinfo`)
+BEFORE any `connect`. SH42b proved `socket/connect/sendto/recvfrom` only against a
+hardcoded loopback IP; the resolution step was unproven. `getaddrinfo` is a libc
+JUMP_SLOT import the resolver binds to HOST glibc via `dlsym` (not a raw syscall), so
+the plane rides the resolver, not `guest_svc`.
+
+New hermetic regression `guest_dns_getaddrinfo_resolves_hostname_then_connect_roundtrip`
+(crates/arm64jit/src/resolver.rs): resolves the `getaddrinfo`/`freeaddrinfo` slots,
+drives a guest `blr x16` with (node="localhost", service=<live-port>, hints=NULL, &res),
+walks the returned aarch64-LP64 addrinfo chain (ai_family@4/ai_len@16/ai_addr@24/
+ai_next@40), asserts localhost is an AF_INET sockaddr exactly 127.0.0.1, feeds
+ai_addr/ai_addrlen into guest_svc socket(198)/connect(203), roundtrips a login payload
+to a real host TCP listener (gets PONG), and frees via the guest's own freeaddrinfo.
+Closes the last network-plane gap between "socket works" and "a session reaches a real
+Roblox API host."
+
+Re-verified the productized deliverable end-to-end (runs/sh43-play-jit.txt):
+`open-sober play --apk roblox-android.apk --jit` extracts the real libroblox.so, drives
+JNI_OnLoad → StartApp → render-init → engine geometry path through the JIT GLES bridge:
+real indexed triangle (centroid red), textured quad (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE
+exact texels), 6 fresh quad-loop frames, swaps Ok(0x1), exit 124. Boot fully-wired: 534
+JUMP_SLOT bound (0 unbound), zero ENOSYS/unhandled hostcalls.
+
+**Next (closest unblocked):** network + data + DNS planes all proven through the real
+ABI. The framework task-producer wall (SH14/SH41/SH42) stands; a GPU host remains the
+environment for the final self-driven-login / frame-performance proof.
+
 ## SH42b (Sep 12, 2026): proved the client-side network plane end-to-end — guest `socket(198)/connect(203)/sendto(206)/recvfrom(207)` roundtrip a login payload to a REAL host TCP peer. Workspace 489/0 (was 488/0). Commit 5cc3dd8.
 
 The existing `socketpair(199)+sendmsg/recvmsg` test proved only a pre-connected
