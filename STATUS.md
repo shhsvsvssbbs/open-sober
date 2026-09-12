@@ -13,7 +13,7 @@ the table now auto-heals to bridge slots — verified live (runs/sh35-pipeline-s
 PRE-SEED snapshot shows all ten as `0x7f000000…` bridges (was raw Mesa). Render path
 unchanged (wrapper Ok(0x0), swap Ok(0x1), 4×4 grid 16/16 readbacks, exit 124).
 New regression `gles3_pipeline_names_resolve_via_int_bridge_for_engine_draw_slots`.
-Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 6a49574.
+Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 51e336f.
 
 ## SH34 (Sep 12, 2026): the coherent renderer scales to a REAL LARGER MESH. New `--renderframe-grid <N>` fabricates an N×N grid of textured quads (independent per-cell, each a distinct texel color at the interpolated vertex UV) driven through the REAL libroblox.so's OWN geometry wrapper 0x5b35288. Verified N=3 (9/9), N=4 (16/16), N=6 (36/36) cell-center glReadPixels readbacks ALL match each cell's exact texel color (±1): 6×6 = 144 verts / 216 idx in one call through engine primitive-setup + indexed glDrawElements, wrapper Ok(0x0), swap Ok(0x1), exit 124. Sustainable (quad-loop 20 iters all Ok(0x1)). Captures runs/sh34-grid.{txt,mp4}; capture_grid.sh. Fixed grid/VBO/tex buffer-overlap bugs (relocated to 0x2000/0x4000/0x6000). Harness-only; single-quad mode (4 distinct checkerboard readbacks) + --jni baseline + baselines unchanged. Workspace 476/0. Doc docs/frontier-sh34-grid.md.
 

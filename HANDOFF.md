@@ -17,7 +17,7 @@ via `eglGetProcAddress` (SH3 interception → `resolve_gles_int`), its table now
 `0x7f000000…` bridge slots (SH28 showed raw `0x7f44…` Mesa). Render path untouched
 (geometry wrapper Ok(0x0), swap Ok(0x1), 4×4 grid 16/16 readbacks, exit 124).
 New regression `gles3_pipeline_names_resolve_via_int_bridge_for_engine_draw_slots`.
-Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 6a49574.
+Doc docs/frontier-sh35-gles3-pipeline-slots.md. Commit 51e336f.
 
 **Next (closest unblocked):** the remaining raw-Mesa slot is 3 (glClearBufferfi,
 float ABI — mixed, needs a float bridge wrap to seed; the harness still seeds it
