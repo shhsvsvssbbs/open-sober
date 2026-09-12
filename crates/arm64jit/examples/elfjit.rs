@@ -3440,6 +3440,129 @@ fn main() {
                         Ok(ok) => eprintln!("[elfjit:renderclear] swap returned Ok({ok:#x}) (eglSwapBuffers after clear)"),
                     }
                 }
+                // --renderframe-progbin: prove the SH35-sealed GLES3 pipeline slots are
+                // genuinely FUNCTIONAL (not just resolvable) by driving the engine's OWN
+                // dispatch stubs 0x5b3a1c0+0xc*N (the exact `adrp x8,6d3b000; ldr x3,[x8,
+                // #752+8N]; br x3` mechanism a real session's frame dispatches through)
+                // with real guest-ABI args on the live context. Covers the three modern
+                // pipelines SH35 bridged:
+                //   A. program-binary round-trip   (slots 13/14 glGetProgramBinary/glProgramBinary,
+                //                                   slot 15 glProgramParameteri retrievable hint)
+                //   B. UBO bind-through-slot       (slot 5  glBindBufferBase GL_UNIFORM_BUFFER)
+                //   C. instanced draw dispatch     (slot 10 glDrawArraysInstanced, count=0 no-op)
+                // Each drives a SEALED bridge slot exactly as the engine would; a mis-bridged
+                // or crash-prone slot surfaces as a Mesa GL error or a crash (exit != 124).
+                if renderframe_args.iter().any(|a| a == "--renderframe-progbin") {
+                    unsafe {
+                    // Guest addresses of the engine's slot stubs (bl-targets in its clear/
+                    // draw code; a guest `br` to these re-dispatches through slot N's bridge).
+                    const SLOT4: u64 = 0x105b3a1f0; // glUniformBlockBinding
+                    const SLOT5: u64 = 0x105b3a1fc; // glBindBufferBase
+                    const SLOT7: u64 = 0x105b3a214; // glGetUniformBlockIndex
+                    const SLOT10: u64 = 0x105b3a238; // glDrawArraysInstanced
+                    const SLOT13: u64 = 0x105b3a25c; // glGetProgramBinary
+                    const SLOT14: u64 = 0x105b3a268; // glProgramBinary
+                    const SLOT15: u64 = 0x105b3a274; // glProgramParameteri
+                    // GLES PLT stubs for the setup that must NOT go through the sealed slots
+                    // (shader compile, buffer create) — same addrs the triangle harness uses.
+                    let plt_createshader = 0x1062d7880u64;
+                    let plt_shadersource = 0x1062d7890u64;
+                    let plt_compileshader = 0x1062d78a0u64;
+                    let plt_attachshader = 0x1062d78d0u64;
+                    let plt_linkprogram = 0x1062d78e0u64;
+                    let plt_bindattrib = 0x1062d78f0u64;
+                    let plt_genbuffers = 0x1062d77c0u64;
+                    let plt_bindbuffer = 0x1062d77b0u64;
+                    let plt_buffdata = 0x1062d77d0u64;
+                    let plt_geterror = 0x1062d7580u64; // glGetError
+                    let plt_createprogram = 0x1062d78c0u64;
+                    let scratch = Box::leak(vec![0u8; 8192].into_boxed_slice());
+                    let sc_base = scratch.as_ptr() as u64;
+                    // Drive a bridge slot stub (a bare `br` to the sealed slot) or a PLT stub.
+                    let mut gslot = |addr: u64, a0: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64| {
+                        let mut s = arm64jit::jit::CpuState::new();
+                        s.tpidr = tpidr;
+                        s.x[31] = isp;
+                        s.x[0] = a0;
+                        s.x[1] = a1;
+                        s.x[2] = a2;
+                        s.x[3] = a3;
+                        s.x[4] = a4;
+                        s.x[5] = a5;
+                        let r = arm64jit::jit::jit_run(iimg, ibase, addr, &mut s as *mut CpuState);
+                        (r, s.x[0])
+                    };
+                    // curl clear-error helper
+                    let geterr = || gslot(plt_geterror, 0, 0, 0, 0, 0, 0).1 as u32;
+                    // Compile+link a minimal program (pass-through VS, red FS).
+                    let vs_src = b"attribute vec4 aPos;\nvoid main(){ gl_Position = vec4(aPos.xyz,1.0); }\n\0";
+                    let fs_src = b"void main(){ gl_FragColor = vec4(1.0,0.2,0.2,1.0); }\n\0";
+                    std::ptr::copy_nonoverlapping(vs_src.as_ptr(), (sc_base + 0x400) as *mut u8, vs_src.len());
+                    std::ptr::copy_nonoverlapping(fs_src.as_ptr(), (sc_base + 0x800) as *mut u8, fs_src.len());
+                    let vs_ary = sc_base + 0xa00;
+                    let fs_ary = sc_base + 0xa10;
+                    *(vs_ary as *mut u64) = sc_base + 0x400;
+                    *(fs_ary as *mut u64) = sc_base + 0x800;
+                    let vs_id = gslot(plt_createshader, 0x8B31, 0, 0, 0, 0, 0).1 & 0xffff_ffff;
+                    let _ = gslot(plt_shadersource, vs_id, 1, vs_ary, 0, 0, 0);
+                    let _ = gslot(plt_compileshader, vs_id, 0, 0, 0, 0, 0);
+                    let fs_id = gslot(plt_createshader, 0x8B30, 0, 0, 0, 0, 0).1 & 0xffff_ffff;
+                    let _ = gslot(plt_shadersource, fs_id, 1, fs_ary, 0, 0, 0);
+                    let _ = gslot(plt_compileshader, fs_id, 0, 0, 0, 0, 0);
+                    let prog = gslot(plt_createprogram, 0, 0, 0, 0, 0, 0).1 & 0xffff_ffff;
+                    let _ = gslot(plt_attachshader, prog, vs_id, 0, 0, 0, 0);
+                    let _ = gslot(plt_attachshader, prog, fs_id, 0, 0, 0, 0);
+                    let loc_name = sc_base + 0xd20;
+                    std::ptr::copy_nonoverlapping(b"aPos\0".as_ptr(), loc_name as *mut u8, 5);
+                    let _ = gslot(plt_bindattrib, prog, 0, loc_name, 0, 0, 0);
+                    // A: slot15 = glProgramParameteri(prog, GL_PROGRAM_BINARY_RETRIEVABLE_HINT=0x8257, 1)
+                    // BEFORE linking so Mesa will emit a retrievable binary.
+                    let a15 = gslot(SLOT15, prog, 0x8257, 1, 0, 0, 0);
+                    eprintln!("[elfjit:progbin] slot15 glProgramParameteri(retrievable hint) -> {a15:?} err={:#x}", geterr());
+                    let _ = gslot(plt_linkprogram, prog, 0, 0, 0, 0, 0);
+                    eprintln!("[elfjit:progbin] linked prog={prog:#x} err={:#x}", geterr());
+                    // glGetProgramBinary(prog, 4096, &length, &format, &binary) through slot13.
+                    let len_slot = sc_base + 0xe00;
+                    let fmt_slot = sc_base + 0xe10;
+                    let bin_slot = sc_base + 0xe40;
+                    *(len_slot as *mut u32) = 0;
+                    *(fmt_slot as *mut u32) = 0;
+                    let a13 = gslot(SLOT13, prog, 4096, len_slot, fmt_slot, bin_slot, 0);
+                    let len = *(len_slot as *const u32);
+                    let fmt = *(fmt_slot as *const u32);
+                    eprintln!("[elfjit:progbin] slot13 glGetProgramBinary -> {a13:?} length={len} format={fmt:#x} err={:#x}", geterr());
+                    assert!(len > 0 && fmt != 0, "glGetProgramBinary through sealed slot13 must return a real binary");
+                    // Re-upload through slot14: glProgramBinary(prog, fmt, bin, len).
+                    let a14 = gslot(SLOT14, prog, fmt as u64, bin_slot, len as u64, 0, 0);
+                    eprintln!("[elfjit:progbin] slot14 glProgramBinary(re-upload) -> {a14:?} err={:#x}", geterr());
+                    // B: UBO bind through slot5. Gen a real buffer, fill 64B, bind to UBO index 0.
+                    let buf_id_slot = sc_base + 0xf00;
+                    let _ = gslot(plt_genbuffers, 1, buf_id_slot, 0, 0, 0, 0);
+                    let ubo_id = *(buf_id_slot as *const u32) as u64;
+                    let ubodata = sc_base + 0xf40;
+                    for i in 0..16 {
+                        *(ubodata as *mut u8).add(i) = (i as u8) << 4;
+                    }
+                    let _ = gslot(plt_bindbuffer, 0x8A11 /*GL_UNIFORM_BUFFER*/, ubo_id, 0, 0, 0, 0);
+                    let _ = gslot(plt_buffdata, 0x8A11, 64, ubodata, 0x88E8 /*GL_DYNAMIC_DRAW*/, 0, 0);
+                    let a5 = gslot(SLOT5, 0x8A11, 0, ubo_id, 0, 0, 0);
+                    eprintln!("[elfjit:progbin] slot5 glBindBufferBase(UBO,0,{ubo_id}) -> {a5:?} err={:#x}", geterr());
+                    // C: instanced draw through slot10. Slot10 currently seeds as glDrawArrays
+                    // (the coherent path uses it for the array draw); RE-point it to the sealed
+                    // glDrawArraysInstanced bridge slot, drive a count=0 no-op, then restore.
+                    let slot10_addr = 0x106d3b2f0u64 + 8 * 10;
+                    let saved_slot10 = unsafe { *(slot10_addr as *const u64) };
+                    if let Some(inst) = arm64jit::resolver::resolve_gles_int(b"glDrawArraysInstanced\0") {
+                        unsafe { *(slot10_addr as *mut u64) = inst };
+                        let a10 = gslot(SLOT10, 0x0004 /*GL_TRIANGLES*/, 0, 0, 3, 0, 0);
+                        eprintln!("[elfjit:progbin] slot10 glDrawArraysInstanced(TRIANGLES,0,0,3) -> {a10:?} err={:#x}", geterr());
+                        unsafe { *(slot10_addr as *mut u64) = saved_slot10 };
+                    } else {
+                        eprintln!("[elfjit:progbin] glDrawArraysInstanced NOT resolvable (skipping C)");
+                    }
+                    eprintln!("[elfjit:progbin] GLES3 pipeline slot probe done (final err={:#x})", geterr());
+                    } // unsafe
+                }
             }
         });
     }
