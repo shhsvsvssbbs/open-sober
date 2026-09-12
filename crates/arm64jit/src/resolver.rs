@@ -2598,4 +2598,126 @@ mod tests {
         // left; just assert the dispatcher resolved the host call (no error).
         assert_eq!(r2, g2.x[0], "second-stage blr dispatched to host (no outside-image error)");
     }
+
+    /// The CLIENT-side DNS plane a real login hits *before* any connect: the
+    /// guest resolves a hostname via the libc `getaddrinfo` import (a JUMP_SLOT
+    /// the resolver binds to HOST glibc through `dlsym`, not a raw syscall) and
+    /// then feeds the returned `ai_addr` straight into the socket plane. SH42b
+    /// proved socket/connect/send/recv only against a hardcoded loopback IP;
+    /// this pins the missing resolution step end-to-end through the REAL guest
+    /// ABI: `getaddrinfo("localhost")` returns a walkable addrinfo chain whose
+    /// `ai_family`/`ai_addr` the guest reads, and connecting to that resolved
+    /// address reaches a live host TCP peer. No host-side surgery — exactly how
+    /// a logged-in session reaches a real Roblox API host.
+    #[test]
+    fn guest_dns_getaddrinfo_resolves_hostname_then_connect_roundtrip() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let ga = resolve(b"getaddrinfo").expect("host getaddrinfo resolvable");
+        let fai = resolve(b"freeaddrinfo").expect("host freeaddrinfo resolvable");
+
+        // A real listener the guest connects to via the RESOLVED address.
+        let ln = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let ln_addr = ln.local_addr().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let srv = std::thread::spawn(move || {
+            let (mut sock, _) = ln.accept().expect("accept");
+            let mut buf = [0u8; 128];
+            let n = sock.read(&mut buf).expect("server read");
+            tx.send(buf[..n].to_vec()).unwrap();
+            sock.write_all(b"PONG").unwrap();
+            sock.flush().unwrap();
+        });
+
+        // Guest memory (host==guest addressable): the C strings and the
+        // addrinfo* output cell getaddrinfo writes into.
+        let hostname = Box::leak(b"localhost\0".to_vec().into_boxed_slice());
+        let service = Box::leak(
+            std::ffi::CString::new(ln_addr.port().to_string().as_bytes())
+                .unwrap()
+                .into_bytes_with_nul()
+                .into_boxed_slice(),
+        );
+        let mut res_cell = Box::new(0u64);
+
+        // Guest image: `blr x16; brk` — arg collection is host-side so floats
+        // and stack don't matter here (getaddrinfo is a pure-int/ptr ABI).
+        let mut img: Vec<u8> = Vec::new();
+        img.extend_from_slice(&0xd63f0200u32.to_le_bytes()); // blr x16
+        img.extend_from_slice(&0xd4200000u32.to_le_bytes()); // brk #0
+
+        let mut st = CpuState::new();
+        // getaddrinfo(node, service, hints, &res)
+        st.x[0] = hostname.as_ptr() as u64;
+        st.x[1] = service.as_ptr() as u64;
+        st.x[2] = 0; // hints = NULL (any family)
+        st.x[3] = (&mut *res_cell as *mut u64) as u64;
+        st.x[16] = ga;
+        let ret = jit_run(&img, 0x1000, 0x1000, &mut st as *mut CpuState).expect("getaddrinfo blr");
+        assert_eq!(ret, 0, "getaddrinfo(localhost) must succeed (EAI_OK=0), got {ret}");
+
+        // Walk the returned addrinfo chain (aarch64 LP64 layout): ai_family@4,
+        // ai_addrlen@16, ai_addr@24, ai_next@40.
+        let mut cur = *res_cell;
+        let mut found_inet = false;
+        let mut found_addr: u64 = 0;
+        let mut found_addrlen: usize = 0;
+        for _ in 0..16 {
+            assert!(cur != 0, "addrinfo chain ended without an AF_INET entry");
+            let family = unsafe { std::ptr::read_unaligned((cur + 4) as *const i32) };
+            let addrlen = unsafe { std::ptr::read_unaligned((cur + 16) as *const u32) } as usize;
+            let addr = unsafe { std::ptr::read_unaligned((cur + 24) as *const u64) };
+            if family == libc::AF_INET as i32 {
+                found_inet = true;
+                found_addr = addr;
+                found_addrlen = addrlen;
+                // The resolved sockaddr must be the loopback our listener bound.
+                let sin = found_addr as *const libc::sockaddr_in;
+                let srr = unsafe { std::ptr::read_unaligned(sin as *const u32) }; // sin_family@0 + sin_port@2
+                assert_eq!(srr & 0xffff, libc::AF_INET as u32, "resolved family is AF_INET");
+                // sin_addr@4 must be 127.0.0.1 (network-order u32 0x0100007f).
+                let saddr = unsafe { std::ptr::read_unaligned((found_addr + 4) as *const u32) };
+                let ip = std::net::Ipv4Addr::from(saddr.to_ne_bytes());
+                assert_eq!(ip, std::net::Ipv4Addr::LOCALHOST, "getaddrinfo(localhost) resolved to {ip}");
+                break;
+            }
+            cur = unsafe { std::ptr::read_unaligned((cur + 40) as *const u64) };
+        }
+        assert!(found_inet, "resolve(localhost) must include an IPv4 entry");
+
+        // Feed the RESOLVED ai_addr straight into the socket plane.
+        let mut st2 = CpuState::new();
+        let mut do_svc = |a: [u64; 6], nr: u64| -> i64 {
+            st2.x[0..6].copy_from_slice(&a);
+            st2.x[8] = nr;
+            crate::jit::guest_svc(&mut st2 as *mut CpuState) as i64
+        };
+        let fd = do_svc([libc::AF_INET as u64, libc::SOCK_STREAM as u64, 0, 0, 0, 0], 198) as i32;
+        assert!(fd >= 0, "socket() failed: {fd}");
+        let r = do_svc(
+            [fd as u64, found_addr, found_addrlen as u64, 0, 0, 0],
+            203,
+        );
+        assert_eq!(r, 0, "connect() to resolved localhost failed: {r}");
+
+        let payload = b"SESSDATA\n";
+        let n = do_svc([fd as u64, payload.as_ptr() as u64, payload.len() as u64, 0, 0, 0], 206);
+        assert_eq!(n, payload.len() as i64, "sendto over resolved conn: {n}");
+        let mut buf = [0u8; 8];
+        let n = do_svc([fd as u64, buf.as_mut_ptr() as u64, buf.len() as u64, 0, 0, 0], 207);
+        assert_eq!(n, 4, "recvfrom PONG over resolved conn: {n}");
+        assert_eq!(&buf[..4], b"PONG");
+        assert_eq!(do_svc([fd as u64, 0, 0, 0, 0, 0], 57), 0, "close()");
+
+        // Free the chain through the guest's own freeaddrinfo import.
+        let mut st3 = CpuState::new();
+        st3.x[0] = *res_cell;
+        st3.x[16] = fai;
+        jit_run(&img, 0x1000, 0x1000, &mut st3 as *mut CpuState).expect("freeaddrinfo blr");
+
+        let got = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("server got payload");
+        assert_eq!(got, payload.to_vec(), "peer received exactly the guest's login payload");
+        srv.join().unwrap();
+    }
 }
