@@ -691,7 +691,18 @@ fn main() {
         // object header) and a jstring handle containing the StartApp params JSON.
         let (env_ptr, _vm) = arm64jit::jni::build_jni();
         let activity = arm64jit::jni::new_fake_object(); // non-null jobject
-        let params = arm64jit::jni::new_string_utf_handle(b"{\"key\":\"\"}");
+        // Default: pass the historical bare-JSON jstring as the params handle.
+        // With --startapp-jobject, pass a real AutoValue-style jobject instead so
+        // StartApp's serialization runs through the jni.rs getter-value registry
+        // (Call{Object,Boolean,Int,Long,Float}Method serve real values) — the
+        // recon-v2 Task-2 prescription. This is the live A/B on whether the value
+        // registry unblocks StartApp's json serialization or whether the SH45
+        // guest-stack-leak is genuinely params-independent.
+        let params = if std::env::args().any(|a| a == "--startapp-jobject") {
+            arm64jit::jni::new_fake_object() // AutoValue InitParams/StartAppParams jobject
+        } else {
+            arm64jit::jni::new_string_utf_handle(b"{\"key\":\"\"}") // legacy JSON jstring
+        };
         let link = u64::from_str_radix(hex.trim_start_matches("0x"), 16)
             .unwrap_or_else(|_| panic!("bad --startapp hex"));
         let start_app = el.guest_of(link);

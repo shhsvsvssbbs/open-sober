@@ -1,5 +1,38 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH56) — empirically CLOSED recon Task-2 on the real binary: the AutoValue getter-value registry (SH55) does NOT fix the StartApp json-abort — the leaked string length is params-independent (a host-mmap pointer read at the append bound-check, never touching the getter registry). Workspace **499/0** (unchanged). Doc docs/frontier-sh56-json-abort-params-independent.md, artifacts runs/sh56-{startapp-json-abort,startapp-jobject-abort,jsondump}.txt.
+
+The recon (docs/recon-framework-boot-order.md, Task-2) claims the `RBX::json::Writer
+string-length-overflow` abort's root cause is the JNI shim: `Call*Method` returned
+typed-0, collapsing the AutoValue params layer so StartApp re-serialized uninitialised
+guest-stack std::strings. SH55 wired the full getter-VALUE registry. But that registry
+had never been observed live against StartApp's serialization (SH55's `--v2boot` stalls
+at rung 1; the productized recipe passes a JSON jstring, not a jobject). This cycle
+drives `nativeAppBridgeV2StartAppWithParams (0x258b144)` with a genuine AutoValue
+jobject (new elfjit flag `--startapp-jobject`) and answers definitively.
+
+**Both params forms abort identically** (exit 139, `RBX::json::Writer string length
+overflow: <host-pointer>`): JSON jstring `{"key":""}` (leak 0x7fb5..., runs/sh56-startapp-json-abort.txt)
+AND real AutoValue jobject + full value registry (leak 0x7f19..., runs/sh56-startapp-jobject-abort.txt).
+Rigorously pinned (`JIT_DUMP_PC`, runs/sh56-jsondump.txt):
+- Append bound-check `0x102355d40`: x1 = a **host mmap pointer** read as the std::string
+  length → throws; mechanism identical to SH45's sp/sp-0x30 leak.
+- Throw helper `0x1025fb6bc`: x0=0x10057765a (fmt string), printed value is the host ptr.
+- **`JIT_TRACE=1` emits ZERO `[jni] Call*Method` getter lines** — the AutoValue getter
+  registry is never even reached during StartApp's serialization.
+
+**Conclusion / redirect:** recon Task-2's root-cause claim is disproven — the value
+registry is necessary if StartApp ever gets far enough to use the params, but it is NOT
+the json-abort's cause. The abort is a harness-bootstrap artifact gated by the
+render/lifecycle drive (SH45's original characterization): the **productized** recipe
+(drives lifecycle + ANativeWindow + render-init warmup WITH StartApp) never aborts and
+renders real frames — re-verified green this cycle (persist roundtrip byte-exact, real
+indexed triangle centroid red, textured quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE, 6
+quad-loop frames, swaps Ok(0x1)). Future bare-StartApp work should target the
+guest memory whose length field holds a host pointer, NOT the getter registry.
+`--startapp-jobject` kept as a reusable params-layer diagnostic. Standing structural
+wall unchanged: type-4 producer vector [0x106829ea8] framework-glue-seeded only.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH55) — completed the AutoValue params getter-value registry (CallLongMethod + CallFloatMethod now serve real values via a new s0-return JNI bridge) and re-tested the ordered V2 ladder WITH a complete params layer (which SH54 lacked): it still stalls at `nativeGameGlobalInit` (parks, never returns) and cannot populate `[0x106829ea8]`. Workspace **499/0** (was 498/0, +1). Doc docs/frontier-sh55-jni-value-registry.md, artifact runs/sh55-v2boot-ladder.txt.
 
 Recon-v2 Task-2 (the json-abort root cause) is that jni.rs routed every `Call*Method`
