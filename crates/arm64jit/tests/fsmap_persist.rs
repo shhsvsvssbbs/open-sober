@@ -400,3 +400,101 @@ fn fsmap_truncate_chdir_linkat_readlinkat_resolve_through_store() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn fsmap_faccessat_uses_true_pathname_and_remaps_into_store() {
+    // faccessat(48) on aarch64 is (dirfd, pathname, mode) — x0=dirfd, x1=pathname,
+    // x2=mode. The old handler passed the DIRFD (e.g. AT_FDCWD=-100) as the
+    // pathname pointer and the real pathname pointer as the mode, so any guest
+    // datastore-accessibility probe on a /data path resolved garbage against the
+    // host root. This pins the corrected arg routing + store remap.
+    let _g = lock_fsmap();
+    let root = std::env::temp_dir().join(format!(
+        "opensober-fsmap-acc-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    fsmap::set_root_for_tests(root.clone());
+
+    // Create a datastore file so an access probe has something to find.
+    const FILE: &str = "/data/data/com.roblox.client/shared_prefs/prefs.xml";
+    let path = cstr(FILE);
+    let fd = svc(
+        [
+            libc::AT_FDCWD as u64,
+            path.as_ptr() as u64,
+            (libc::O_CREAT | libc::O_RDWR) as u64,
+            0o600,
+            0,
+            0,
+        ],
+        56,
+    );
+    assert!(fd >= 0, "openat failed: {fd}");
+    let fd = fd as i32;
+    let p = cstr("<prefs/>");
+    assert_eq!(svc([fd as u64, p.as_ptr() as u64, 8, 0, 0, 0], 64), 8);
+    assert_eq!(svc([fd as u64, 0, 0, 0, 0, 0], 57), 0);
+
+    // faccessat(AT_FDCWD, FILE, R_OK) must resolve THROUGH the store and return 0.
+    let probe = cstr(FILE);
+    let acc = svc(
+        [
+            libc::AT_FDCWD as u64, probe.as_ptr() as u64,
+            libc::R_OK as u64, 0, 0, 0,
+        ],
+        48,
+    );
+    assert_eq!(acc, 0, "faccessat on existing store file failed: {acc}");
+
+    // Same probe with W_OK must also pass (file is writable).
+    let accw = svc(
+        [
+            libc::AT_FDCWD as u64, probe.as_ptr() as u64,
+            libc::W_OK as u64, 0, 0, 0,
+        ],
+        48,
+    );
+    assert_eq!(accw, 0, "faccessat W_OK on store file failed: {accw}");
+
+    // A MISSING store path must be -ENOENT — the resolution must land in the
+    // store index, NOT fall through to the host root (host root for an
+    // unmapped-but-wrong path would EPERM/error differently). With the OLD
+    // buggy handler this probe read the dirfd as a garbage pathname pointer.
+    let ghost = cstr("/data/data/com.roblox.client/shared_prefs/ghost.xml");
+    let accm = svc(
+        [
+            libc::AT_FDCWD as u64, ghost.as_ptr() as u64,
+            libc::R_OK as u64, 0, 0, 0,
+        ],
+        48,
+    );
+    assert_eq!(accm, -libc::ENOENT as i64, "missing faccessat should be -ENOENT, got {accm}");
+
+    // dirfd must be honored, not hardcoded AT_FDCWD: open a real dirfd on the
+    // store's shared_prefs dir, then faccessat(dirfd, "prefs.xml", R_OK) with a
+    // RELATIVE pathname must resolve against THAT fd (the store dir).
+    let dir = cstr("/data/data/com.roblox.client/shared_prefs");
+    let dfd = svc(
+        [
+            libc::AT_FDCWD as u64, dir.as_ptr() as u64,
+            libc::O_RDONLY as u64 | libc::O_DIRECTORY as u64,
+            0, 0, 0,
+        ],
+        56,
+    );
+    assert!(dfd >= 0, "openat dirfd failed: {dfd}");
+    let dfd = dfd as i32;
+    let rel = cstr("prefs.xml");
+    let accr = svc(
+        [
+            dfd as u64, rel.as_ptr() as u64,
+            libc::R_OK as u64, 0, 0, 0,
+        ],
+        48,
+    );
+    assert_eq!(accr, 0, "faccessat relative-to-dirfd on store file failed: {accr}");
+    assert_eq!(svc([dfd as u64, 0, 0, 0, 0, 0], 57), 0);
+
+    let _ = std::fs::remove_dir_all(&root);
+}

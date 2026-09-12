@@ -810,8 +810,15 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         61 => unsafe { libc::syscall(libc::SYS_getdents64, a[0] as c_int, a[1] as usize, a[2] as usize) as c_long },
         62 => unsafe { libc::lseek(a[0] as c_int, a[1] as i64, a[2] as c_int) as c_long },
         48 => {
-            let (p, _keep) = mappath(a[0] as *const c_char, false);
-            unsafe { libc::faccessat(libc::AT_FDCWD, p, a[1] as c_int, 0) as c_long }
+            // faccessat(48): dirfd(x0), pathname(x1), mode(x2) — the SAME
+            // positional ABI as readlinkat. (The old handler passed the DIRFD
+            // (e.g. AT_FDCWD=-100) as the pathname char-pointer and the real
+            // pathname pointer as the mode — a host-root read of garbage + an
+            // irrelevant mode, so any guest datastore-accessibility probe on a
+            // /data path resolved wrong.) Remap the TRUE pathname (a[1]) and
+            // pass the real dirfd/mode through.
+            let (p, _keep) = mappath(a[1] as *const c_char, false);
+            unsafe { libc::faccessat(a[0] as c_int, p, a[2] as c_int, 0) as c_long }
         }
         78 => {
             // readlinkat(78): dirfd, pathname, buf, bufsiz. The old handler was
