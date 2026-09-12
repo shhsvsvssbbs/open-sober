@@ -583,14 +583,16 @@ fn bind_glob_dat(
                 } else {
                     None
                 };
-                match fallback.or_else(|| {
-                    std::ffi::CString::new(name)
-                        .ok()
-                        .and_then(|c| {
-                            let p = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c.as_ptr()) };
-                            (!p.is_null()).then_some(p as u64)
-                        })
-                }) {
+                match fallback
+                    .or_else(|| crate::resolver::resolve_android_data(&name))
+                    .or_else(|| {
+                        std::ffi::CString::new(name)
+                            .ok()
+                            .and_then(|c| {
+                                let p = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c.as_ptr()) };
+                                (!p.is_null()).then_some(p as u64)
+                            })
+                    }) {
                     Some(a) => Some(a.wrapping_add(r_addend as u64)),
                     None => None,
                 }

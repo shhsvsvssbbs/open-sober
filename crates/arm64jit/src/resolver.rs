@@ -1433,6 +1433,50 @@ pub fn register_named(name: &[u8], f: crate::jit::HostCall) -> u64 {
     addr
 }
 
+/// Resolve a well-known **data-object** import to a stable host address.
+///
+/// The real libroblox.so (built against Android libmediandk, which does not
+/// exist on the host) imports 10 `AMEDIAFORMAT_KEY_*` OBJECT symbols — the
+/// NDK media-format string constants ("mime", "width", ...). A GLOB_DAT /
+/// ABS64 relocation writes the *address of the constant* into the GOT slot;
+/// the guest does `adrp; ldr xN,[xN,#off]` to load that pointer and passes it
+/// to `AMediaFormat_*` as a `const char*`. Left unresolved (0), a real
+/// video/audio-decoding session reads a NULL key string (SH19/SH24-style data
+/// fault). Addr is the address of a leaked, immortal `CString` so the pointer
+/// stays valid for the whole process.
+pub fn resolve_android_data(name: &[u8]) -> Option<u64> {
+    use std::collections::HashMap;
+    static CACHE: OnceLock<Mutex<HashMap<Vec<u8>, u64>>> = OnceLock::new();
+    const KEYS: &[(&[u8], &[u8])] = &[
+        (b"AMEDIAFORMAT_KEY_MIME", b"mime\0"),
+        (b"AMEDIAFORMAT_KEY_WIDTH", b"width\0"),
+        (b"AMEDIAFORMAT_KEY_HEIGHT", b"height\0"),
+        (b"AMEDIAFORMAT_KEY_COLOR_FORMAT", b"color-format\0"),
+        (b"AMEDIAFORMAT_KEY_STRIDE", b"stride\0"),
+        (b"AMEDIAFORMAT_KEY_BIT_RATE", b"bitrate\0"),
+        (b"AMEDIAFORMAT_KEY_FRAME_RATE", b"frame-rate\0"),
+        (b"AMEDIAFORMAT_KEY_I_FRAME_INTERVAL", b"i-frame-interval\0"),
+        (b"AMEDIAFORMAT_KEY_CHANNEL_COUNT", b"channel-count\0"),
+        (b"AMEDIAFORMAT_KEY_SAMPLE_RATE", b"sample-rate\0"),
+    ];
+    let Some((_, val)) = KEYS.iter().find(|(k, _)| *k == name) else {
+        return None;
+    };
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    let key_v = name.to_vec();
+    if let Some(addr) = cache.get(&key_v) {
+        return Some(*addr);
+    }
+    // Note: we must return a fresh pointer if not provisioned; the CStr is
+    // deliberately leaked so its address remains valid for the guest lifetime.
+    let cs = CString::from_vec_with_nul(val.to_vec()).ok()?;
+    let raw = cs.as_ptr() as u64;
+    std::mem::forget(cs); // immortal: guest allocates/reads this for the process lifetime
+    cache.insert(key_v, raw);
+    Some(raw)
+}
+
 /// Resolve a **double-precision** float-ABI import to a float thunk guest addr.
 /// The guest (Roblox) passes doubles in v0-v7; our float bridge reads those
 /// lanes as f64 and calls the host double function through xmm0-xmm7. Only
@@ -3022,5 +3066,53 @@ mod tests {
         let saddr = unsafe { std::ptr::read_unaligned(first as *const u32) };
         let ip = std::net::Ipv4Addr::from(saddr.to_ne_bytes());
         assert_eq!(ip, std::net::Ipv4Addr::LOCALHOST, "gethostbyname(localhost) -> {ip}");
+    }
+
+    /// The real libroblox.so imports 10 `AMEDIAFORMAT_KEY_*` OBJECT symbols from
+    /// Android libmediandk (absent host-side). A GLOB_DAT relocation writes the
+    /// *address of the string constant* into the GOT slot; the guest does
+    /// `adrp;ldr xN,[xN,#off]` to load it and passes it to `AMediaFormat_*` as a
+    /// `const char*`. Before SH52 those slots resolved to 0, so a real video/
+    /// audio-decoding session read a NULL key string (SH19/SH24-style data fault).
+    /// Pins that each key now resolves to a live, NUL-terminated host C string
+    /// whose bytes are exactly the NDK constant, and that the resolved address is
+    /// stable/cached (same pointer on repeat).
+    #[test]
+    fn android_media_format_key_data_imports_resolve_to_live_strings() {
+        let expected: Vec<(&[u8], &[u8])> = vec![
+            (b"AMEDIAFORMAT_KEY_MIME", b"mime"),
+            (b"AMEDIAFORMAT_KEY_WIDTH", b"width"),
+            (b"AMEDIAFORMAT_KEY_HEIGHT", b"height"),
+            (b"AMEDIAFORMAT_KEY_COLOR_FORMAT", b"color-format"),
+            (b"AMEDIAFORMAT_KEY_STRIDE", b"stride"),
+            (b"AMEDIAFORMAT_KEY_BIT_RATE", b"bitrate"),
+            (b"AMEDIAFORMAT_KEY_FRAME_RATE", b"frame-rate"),
+            (b"AMEDIAFORMAT_KEY_I_FRAME_INTERVAL", b"i-frame-interval"),
+            (b"AMEDIAFORMAT_KEY_CHANNEL_COUNT", b"channel-count"),
+            (b"AMEDIAFORMAT_KEY_SAMPLE_RATE", b"sample-rate"),
+        ];
+
+        for (sym, want) in &expected {
+            let Some(addr) = crate::resolver::resolve_android_data(sym) else {
+                panic!("{} must resolve", String::from_utf8_lossy(sym));
+            };
+            assert!(addr != 0, "{} must be non-null", String::from_utf8_lossy(sym));
+            let cs = unsafe { std::ffi::CStr::from_ptr(addr as *const libc::c_char) };
+            let got = cs.to_bytes();
+            assert_eq!(
+                got, *want,
+                "{} string constant bytes == NDK value",
+                String::from_utf8_lossy(sym)
+            );
+            // Stable/cached: a second resolve returns the same pointer so the GOT
+            // slot write is idempotent across the JUMP_SLOT + GLOB_DAT paths.
+            let again = crate::resolver::resolve_android_data(sym).expect("repeat resolve");
+            assert_eq!(addr, again, "{} cached pointer stable", String::from_utf8_lossy(sym));
+        }
+
+        // Unrelated data-object names (bionic FILE array base, unknown) must NOT
+        // be claimed by the media-key resolver — they fall through to dlsym/0.
+        assert!(crate::resolver::resolve_android_data(b"__sF").is_none());
+        assert!(crate::resolver::resolve_android_data(b"definitely_not_a_key").is_none());
     }
 }
