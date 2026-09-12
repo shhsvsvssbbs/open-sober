@@ -1,5 +1,32 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH41 (Sep 12, 2026): fixed a real faccessat(48) arg-order + remap bug in guest_svc (data-plane hardening for the datastore-accessibility probe), and corrected a stale documented premise (the deque-maintenance BSS globals ARE populated at runtime). Workspace 487/0 (was 486/0). Commit e08ddee.
+
+aarch64 raw `faccessat(48)` is `(dirfd, pathname, mode)` — x0=dirfd, x1=pathname,
+x2=mode. The old handler mapped `a[0]` (the dirfd, e.g. AT_FDCWD=-100) as a
+pathname C-string and passed the real pathname pointer (truncated to c_int) as
+the mode — so any guest "is my /data session file there?" accessibility probe
+read garbage against the host root. Fix: dirfd=a[0], pathname=a[1] remapped,
+mode=a[2] (same arg-order class as SH40's readlinkat fix). Regression
+`fsmap_faccessat_uses_true_pathname_and_remaps_into_store` drives the real
+guest_svc ABI: R_OK/W_OK on an existing store prefs.xml pass, a missing store
+path is -ENOENT (store-index resolution, not host-root), and a relative probe
+resolves against a real openat(O_DIRECTORY) store dirfd (proves dirfd honored,
+not hardcoded AT_FDCWD).
+
+Corrects SH39b/SH14: a live JIT_FRAMEWORK_DUMP under the stable boot shows the
+three deque-maintenance BSS globals hold real .text addresses
+(0x1068262e8=0x10620db24, 0x106826300=0x102176bfc, 0x106826308=0x1022199e0) —
+NOT "statically 0 / not host-drivable." The targets are thin bionic/atrace-ish
+upkeep functions (not render producers), and the drain still hardcodes w4=4
+(maintenance), so the structural "engine never self-produces a render task" wall
+stands — but future cycles should treat those globals as live, re-opening the
+--deque-node-live path (SH13). Verified: cargo test 487/0; build clean (only
+pre-existing warnings); full real-boot render reproduces (exit 124, real
+triangle centroid RGBA(255,0,0,255) + textured quad exact texels, 4 fresh
+quad-loop frames, swap Ok(0x1), zero ENOSYS/unhandled). Doc
+docs/frontier-sh41-faccessat-fix.md; run-log runs/sh41-boot-render-verify.txt.
+
 ## SH40b (Sep 12, 2026): added flock(32)+fallocate(285) to guest_svc (SQLite datastore concurrency/preallocation) and dropped a dead duplicate truncate arm. Workspace 486/0. Commit bd00e88.
 
 The real client's datastore is SQLite-backed: it takes advisory file locks

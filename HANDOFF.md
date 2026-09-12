@@ -1,6 +1,66 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH40/40b) — completed the fsmap data-plane path coverage: statx/statfs/truncate/chdir/linkat/symlinkat/readlinkat now remap into the persistent store (fixing readlinkat + symlinkat arg-order bugs), plus flock/fallocate for the SQLite datastore. Workspace 486/0 (was 484/0). Commits 56d7697 + bd00e88.
+## Session (Sep 12, 2026, hermes-worker, cycle SH41) — fixed a real faccessat(48) arg-order + remap bug in guest_svc (aarch64 `faccessat(dirfd, pathname, mode)` — the old handler passed the dirfd as the pathname and the pathname pointer as the mode, so any guest "is my /data session file there?" datastore-accessibility probe read garbage against the host root) and corrected a stale documented premise. Workspace 487/0 (was 486/0). Commit e08ddee.
+
+SH40 completed the fsmap data-plane path coverage, but the fsmap layer is only
+as correct as each syscall's argument routing. Auditing the remapped syscalls
+against their real aarch64 signatures surfaced one remaining arg-order bug:
+`faccessat(48)`. On aarch64 it is `faccessat(dirfd, pathname, mode)` —
+x0=dirfd, x1=pathname, x2=mode — but the SH38-era handler did
+`mappath(a[0])` + `libc::faccessat(AT_FDCWD, p, a[1] as c_int, 0)`, i.e. it
+treated the dirfd integer (often `AT_FDCWD = -100`, an invalid address) as the
+pathname C-string and passed the real pathname pointer (truncated to c_int) as
+the mode. The same class of bug SH40 fixed for readlinkat/symlinkat. Since bionic
+and the Java datastore stack answer "does my session file exist / is it
+writable" with exactly this primitive, a wrong faccessat makes the client
+misjudge its own (now-persistent) store — undermining objective 2b.
+
+- Fix (crates/arm64jit/src/jit.rs): `(p,_) = mappath(a[1])`;
+  `libc::faccessat(a[0] as c_int, p, a[2] as c_int, 0)`.
+- New hermetic regression (tests/fsmap_persist.rs)
+  `fsmap_faccessat_uses_true_pathname_and_remaps_into_store`, driving the real
+  guest_svc ABI under a configured Android root: (1) R_OK/W_OK on an existing
+  store `prefs.xml` return 0 (true pathname read + store-resolution);
+  (2) a missing store path returns -ENOENT (store-index, not host-root); (3) a
+  RELATIVE probe against a real `openat(O_DIRECTORY)` store dirfd returns 0
+  (dirfd honored, not hardcoded AT_FDCWD). The old handler fails 2/3 (dirfd read
+  as path).
+
+**Also corrects a stale documented premise.** SH14/SH39b wrote that the
+type-4 deque-maintenance handler "blrs through framework-owned BSS globals
+0x1068262e8/300/308 — all statically 0 on this box." A `JIT_FRAMEWORK_DUMP`
+under the stable boot (exit 124) shows those globals are **populated at runtime
+with real .text addresses**:
+```
+[elfjit:fw] deque-fwd 0x1068262e8=0x10620db24 0x106826300=0x102176bfc 0x106826308=0x1022199e0
+```
+(identical across the full render recipe). The three targets are thin
+bionic/atrace-ish upkeep functions (each derefs TLS via `adrp 0x67d1000[#1776]`)
+— not render/session producers — and the drain's pop-loop still hardcodes
+`w4=4` (maintenance) at dispatch (0x2856ffc). So the **structural wall stands**:
+the engine still never self-produces a render-task type, and frames remain
+harness-driven on the live engine context. But future cycles should not treat
+those globals as an impossible NULL: a seeded node's maintenance dispatch does
+execute real engine code (SH13's `--deque-node-live` live-drainer result), which
+partially re-opens the deque path this handoff had flagged closed.
+
+Verified:
+- `cargo test --workspace` → 487 passed / 0 failed (was 486/0; +1 regression).
+- `cargo build --workspace` clean (only pre-existing non_snake_case/dead_code
+  warnings; none in the edited lines).
+- Full real-boot render (runs/sh41-boot-render-verify.txt): exit 124 stable, real
+  indexed glDrawElements triangle (centroid RGBA(255,0,0,255)) + textured quad
+  (BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels) + 4 fresh quad-loop frames,
+  swap Ok(0x1), zero ENOSYS/unhandled syscalls, no json-Writer terminate.
+
+**Next (closest unblocked):** the data-plane now covers the full SQLite
+session-datastore lifecycle through the store. The engine's own main-loop
+producer still never enqueues a render-task type (the `w4=4` structural cap),
+so frames are harness-driven. Two directions: (a) use the now-confirmed-live
+maintenance globals to drive `--deque-node-live` toward real engine framework
+code (SH13's live-drainer path) and see whether a maintenance dispatch advances
+the session past idle; or (b) harden the JNI/network surface the client touches
+once a real session reads/writes its now-persistent store.
 
 SH38's fsmap remapped openat/mkdirat/unlinkat/renameat/faccessat/newfstatat, but
 the remaining path-taking syscalls a real session's datastore touches were still
