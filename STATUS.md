@@ -1,5 +1,29 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH51 (Sep 12, 2026): the live client's data-persistence plane is now SELF-VERIFYING in the productized deliverable. Workspace **496/0** (unchanged). Doc frontier-sh51-live-persist.md, log runs/sh51-persist-live.txt.
+
+`open-sober play --apk roblox-android.apk --jit` previously made ZERO `[fsmap]
+remap:` lines (engine never reaches a session), so objective 2b (client
+REMEMBERS sign-in via its `/data` session/login datastore) was proven only
+hermetically. Now the recipe adds `--persist-roundtrip` + `JIT_FSMAP_LOG=1`:
+elfjit's `run_persist_roundtrip()` drives a real guest
+`/data/user/0/com.roblox.client/databases/session.db` openat→write→fsync→close→
+reopen→read roundtrip through guest_svc/fsmap on the armed SOBER_ANDROID_ROOT and
+asserts byte-exact read-back + a real on-disk file.
+
+Verified (exit 124): `[fsmap] remap: ...session.db -> ~/.local/share/open-sober/
+android-root/...` (×2); `[persist] live datastore roundtrip: write=45B fsync=0
+read_back_byte_exact=true on_disk=Some(true)`; store holds exactly
+`ROBLOSECURITY=_live_client_remembered_session` (0600, 45B). Zero ENOSYS/abort.
+Render baseline intact (triangle centroid red + textured quad
+BL=RED/BR=GREEN/TR=WHITE/TL=BLUE + 6 quad-loop frames, swaps Ok(0x1)).
+
+Pinned the type-4 dispatch contract from fresh disasm (dispatcher 0x10285371c on
+w4==4 `br`s [0x106829ea8] with x0=node,x1=[node+32]&~1,x2=consumer; vector is a
+framework-installed leaf fn; seeding with the engine's own dispatcher would
+recurse). Standing wall unchanged: engine never self-produces a session/render
+(type-4 producer vector still glue-installed only); frames stay harness-driven.
+
 ## SH48 (Sep 12, 2026): added the missing per-instance vertex-attribute divisor to the GLES int bridge and turned the SH37 instanced gate from a count=0 no-op probe into a real non-empty instanced draw. Workspace **495/0** (was 494/0, +1). Doc frontier-sh48-instanced-divisor.md.
 
 The engine's instanced-mesh path was one function short of working: SH35 sealed

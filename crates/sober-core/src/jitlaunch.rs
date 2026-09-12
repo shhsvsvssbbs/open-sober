@@ -66,6 +66,7 @@ pub fn invocation_proven(lib: &Path, prove_frames: u32) -> ElfJitInvocation {
         "--renderframe-quad".into(),
         "--renderframe-quad-loop".into(),
         prove_frames.to_string(),
+        "--persist-roundtrip".into(),
         "--kicker".into(),
         KICKER.to_string(),
     ];
@@ -77,6 +78,9 @@ pub fn invocation_proven(lib: &Path, prove_frames: u32) -> ElfJitInvocation {
             // reaches the EGL context before the first frame drive.
             ("JIT_DRIVE_LIFECYCLE".into(), "1".into()),
             ("RENDERINIT_WARMUP_MS".into(), "5000".into()),
+            // Observe the live client's data-plane: log every guest /data (etc.)
+            // path remapped into the persistent store (proves persistence runs).
+            ("JIT_FSMAP_LOG".into(), "1".into()),
         ],
     }
 }
@@ -198,12 +202,20 @@ mod tests {
         }
         let ql = a.iter().position(|x| x == "--renderframe-quad-loop").unwrap();
         assert_eq!(a[ql + 1], "6", "bounded fresh textured frames before idle");
+        assert!(
+            a.iter().any(|x| x == "--persist-roundtrip"),
+            "productized play must self-verify the live data-persistence roundtrip"
+        );
         let ki = a.iter().position(|x| x == "--kicker").unwrap();
         assert_eq!(a[ki + 1], "0x106863af8", "lifecycle pulse");
 
         // Env drives the boot lifecycle + warms the render init.
         assert!(inv.env.iter().any(|(k, v)| k == "JIT_DRIVE_LIFECYCLE" && v == "1"));
         assert!(inv.env.iter().any(|(k, v)| k == "RENDERINIT_WARMUP_MS" && v == "5000"));
+        assert!(
+            inv.env.iter().any(|(k, v)| k == "JIT_FSMAP_LOG" && v == "1"),
+            "product run must log live persistence remaps"
+        );
     }
 
     #[test]

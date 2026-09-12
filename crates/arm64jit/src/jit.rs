@@ -697,6 +697,14 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
     let mappath = |p: *const c_char, create: bool| -> (*const c_char, Option<crate::fsmap::RemappedPath>) {
         match crate::fsmap::remap_path(p) {
             Some(rm) => {
+                if std::env::var("JIT_FSMAP_LOG").is_ok() {
+                    let gp = unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy();
+                    eprintln!(
+                        "[fsmap] remap: {} -> {}",
+                        gp,
+                        rm.host_path().display()
+                    );
+                }
                 crate::fsmap::ensure_parents(Some(&rm), create);
                 (rm.as_ptr(), Some(rm))
             }

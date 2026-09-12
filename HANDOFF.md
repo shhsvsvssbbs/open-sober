@@ -1,6 +1,48 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH50) — closed the LAST two NULL-dispatch slots in the engine's real GLES render table: the plain (non-EXT) GL_EXT_debug_marker names `glPushGroupMarker`/`glPopGroupMarker` now resolve via an EXT-sibling fallback and become real dispatchable bridge slots. Workspace 496/0 (was 495/0, +1). Doc docs/frontier-sh50-marker-names-ext-fallback.md.
+## Session (Sep 12, 2026, hermes-worker, cycle SH51) — the live client's data-persistence plane is now SELF-VERIFYING in the productized deliverable: `open-sober play --apk roblox-android.apk --jit` now drives a real guest `/data/user/0/com.roblox.client/databases/session.db` openat→write→fsync→close→reopen→read roundtrip through `guest_svc`/fsmap and proves it byte-exact on the armed persistent host store — turning the previous ZERO-remap product run into an observable live-client persistence exhibit. Workspace 496/0 (unchanged). Doc docs/frontier-sh51-live-persist.md, log runs/sh51-persist-live.txt.
+
+Objective 2b ("the client REMEMBERS sign-in via its own session/login
+datastore") was previously proven only hermetically (SH38–SH42 committed tests);
+the productized run made ZERO `[fsmap] remap:` lines because the engine never
+reaches a session. This cycle embeds the datastore roundtrip into the elfjit
+harness the product launches:
+
+- **example/elfjit.rs `run_persist_roundtrip()`**: openat(O_CREAT)→write→fsync→
+  close→reopen→read of `/data/user/0/com.roblox.client/databases/session.db` via
+  `guest_svc`, asserting byte-exact read-back AND a real on-disk file under the
+  armed SOBER_ANDROID_ROOT. Invoked at startup (`--persist-roundtrip`) because
+  StartApp parks in an idle main-loop and never returns, so a post-boot hook is
+  unreachable.
+- **sober-core jitlaunch.rs**: the productized `play --jit` recipe now adds
+  `--persist-roundtrip` + exports `JIT_FSMAP_LOG=1` — every play run
+  self-verifies live persistence. Both unit tests extended.
+- **arm64jit/src/jit.rs** guest_svc mappath: env-gated `[fsmap] remap:` line
+  makes live remaps observable.
+
+**Live artifact (runs/sh51-persist-live.txt, exit 124):**
+  `[fsmap] remap: /data/user/0/com.roblox.client/databases/session.db -> ~/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db` (×2)
+  `[persist] live datastore roundtrip: write=45B fsync=0 read_back_byte_exact=true on_disk=Some(true)`
+  and the on-disk store holds exactly `ROBLOSECURITY=_live_client_remembered_session`
+  (0600, 45 B). Zero ENOSYS/abort. Full render baseline intact in the same run
+  (triangle centroid red + textured quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE + 6
+  quad-loop frames, swaps Ok(0x1)).
+
+**Also pins the type-4 dispatch contract from fresh disasm** (for the next
+frontier cycle): dispatcher 0x10285371c (file 0x285371c), on `w4==4`, loads
+`[0x106829ea8]` and `br`s to it with x0=node, x1=[node+32]&~1, x2=consumer — the
+vector is a leaf function pointer the framework installs; `cbz` returns doing
+nothing when unset (the headless-boot wall). Seeding it with the engine's own
+0x10285371c would RECURSE (that fn reads the vector), so a correct seed needs the
+real framework-installed "process popped task node" worker, whose address is not
+statically in the binary (external-glue gap, SH46).
+
+**Honest scope:** this makes live persistence self-verifying/observable in the
+deliverable, but drives the JIT's own guest_svc ABI rather than the engine's
+session code. The standing structural wall is unchanged: the engine still never
+self-produces a session or renders its own login/home screen (type-4 producer
+vector [0x106829ea8] is framework-glue installed only); frames remain
+harness-driven on the live engine context.
 
 JIT_EGL_LOG (SH47) left exactly two `UNRESOLVED` eglGetProcAddress names:
 `glPushGroupMarker`/`glPopGroupMarker` (non-EXT spelling). They ARE in

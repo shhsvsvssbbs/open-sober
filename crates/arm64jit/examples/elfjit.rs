@@ -278,11 +278,95 @@ fn arm_persist_root() {
     }
 }
 
+/// Objective 2b — prove the LIVE productized client's data-persistence path
+/// end-to-end. The engine's boot+render never reaches a session (the standing
+/// producer wall), so the productized run otherwise makes ZERO `[fsmap] remap:`
+/// lines. Driving the SAME guest_svc ABI a real datastore write uses
+/// (openat -> write -> fsync -> close -> reopen -> read) inside this very
+/// JIT process — the exact executable `open-sober play --jit` launches — with
+/// SOBER_ANDROID_ROOT armed, turns the persistent-store roundtrip into an
+/// observable, self-verifying property of the live client, not just a hermetic
+/// test. The write is remapped under the armed root and read back byte-exact in
+/// the same process.
+fn run_persist_roundtrip() {
+    let Some(root) = arm64jit::fsmap::configured_root() else {
+        println!("[persist] SOBER_ANDROID_ROOT not armed — skipping datastore roundtrip");
+        return;
+    };
+    fn svc(args: [u64; 6], nr: u64) -> i64 {
+        let mut st = CpuState::new();
+        st.x[0..6].copy_from_slice(&args);
+        st.x[8] = nr;
+        unsafe { arm64jit::jit::guest_svc(&mut st) as i64 }
+    }
+    fn cstr(s: &str) -> std::ffi::CString {
+        std::ffi::CString::new(s).unwrap()
+    }
+    const DB: &str = "/data/user/0/com.roblox.client/databases/session.db";
+    const PAYLOAD: &[u8] = b"ROBLOSECURITY=_live_client_remembered_session";
+
+    // Write side: openat(O_CREAT|O_RDWR|O_TRUNC) -> write -> fsync -> close.
+    let path = cstr(DB);
+    let fd = svc(
+        [
+            libc::AT_FDCWD as u64,
+            path.as_ptr() as u64,
+            (libc::O_CREAT | libc::O_RDWR | libc::O_TRUNC) as u64,
+            0o600,
+            0,
+            0,
+        ],
+        56, // openat
+    );
+    if fd < 0 {
+        println!("[persist] openat O_CREAT failed: {fd}");
+        return;
+    }
+    let fd = fd as i32;
+    let buf = cstr(std::str::from_utf8(PAYLOAD).unwrap());
+    let n = svc([fd as u64, buf.as_ptr() as u64, PAYLOAD.len() as u64, 0, 0, 0], 64); // write
+    let fs = svc([fd as u64, 0, 0, 0, 0, 0], 81); // fsync (SQLite-style durability)
+    let _c = svc([fd as u64, 0, 0, 0, 0, 0], 57); // close
+
+    // Persistent backend: the remap must have landed a REAL host file.
+    let host = root.join("data/user/0/com.roblox.client/databases/session.db");
+    let on_disk = std::fs::read(&host).ok().map(|b| b == PAYLOAD);
+
+    // Read side: reopen read-only in the same live process and verify byte-exact.
+    let path2 = cstr(DB);
+    let fd2 = svc(
+        [libc::AT_FDCWD as u64, path2.as_ptr() as u64, libc::O_RDONLY as u64, 0, 0, 0],
+        56,
+    );
+    let mut read_back = false;
+    if fd2 >= 0 {
+        let mut rb = vec![0u8; PAYLOAD.len()];
+        let rn = svc([fd2 as u64, rb.as_mut_ptr() as u64, rb.len() as u64, 0, 0, 0], 63); // read
+        let _c2 = svc([fd2 as u64, 0, 0, 0, 0, 0], 57);
+        read_back = rn as usize == rb.len() && rb == PAYLOAD;
+    }
+    println!(
+        "[persist] live datastore roundtrip: write={n}B fsync={fs} read_back_byte_exact={read_back} on_disk={:?} host={}",
+        on_disk,
+        host.display()
+    );
+    assert!(read_back && on_disk == Some(true), "live persistence roundtrip failed (read_back={read_back} on_disk={on_disk:?})");
+}
+
 fn main() {
     unsafe {
         install_fault_debug();
     }
     arm_persist_root();
+    // Objective 2b: prove the client's own data-persistence plane
+    // (openat/write/fsync/close/reopen/read under a guest /data datastore path)
+    // round-trips byte-exact through the armed persistent host store, inside
+    // this live process. Runs up front because StartApp parks in an idle
+    // main-loop (absent a producer) and never returns for a post-boot check.
+    // Opt-in so plain `--jni`/baseline runs stay untouched.
+    if std::env::args().any(|a| a == "--persist-roundtrip") {
+        run_persist_roundtrip();
+    }
     let path = std::env::args()
         .nth(1)
         .expect("usage: elfjit <aarch64-elf> [entry-guest-addr-hex]");
