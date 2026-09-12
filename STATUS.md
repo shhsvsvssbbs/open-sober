@@ -1,5 +1,7 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH43b (Sep 12, 2026): also prove the legacy `gethostbyname` resolution path — the client imports both APIs. `gethostbyname("localhost")` returns a static thread-local `hostent` (h_addrtype@16/h_length@20/h_addr_list@24), a differently-shaped result than getaddrinfo; the regression walks it to an AF_INET 127.0.0.1. Workspace 491/0 (was 490/0). Commit 75d9d31.
+
 ## SH43 (Sep 12, 2026): prove the guest DNS plane through the real ABI — `getaddrinfo("localhost") → ai_addr → connect → send/recv` roundtrip to a real host TCP peer. Workspace 490/0 (was 489/0). Commit 23f4ff4.
 
 A logged-in session's FIRST network action is hostname resolution (`getaddrinfo`)

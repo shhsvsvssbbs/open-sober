@@ -1,5 +1,7 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH43b) — also proved the legacy `gethostbyname` resolution path (the client imports both DNS APIs). `gethostbyname("localhost")` returns a static thread-local `hostent` — a differently-shaped result than getaddrinfo (h_addrtype@16/h_length@20/h_addr_list@24) — walked to an AF_INET 127.0.0.1. Workspace 491/0 (was 490/0). Commit 75d9d31.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH43) — proved the guest DNS plane end-to-end through the real guest ABI: `getaddrinfo("localhost") → ai_addr → connect(203) → sendto → recvfrom` roundtrips a login payload to a real host TCP peer, then frees via the guest's own freeaddrinfo. Workspace 490/0 (was 489/0). Commit 23f4ff4.
 
 A logged-in session's FIRST network action is hostname resolution — `getaddrinfo` —
