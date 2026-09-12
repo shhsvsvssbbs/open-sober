@@ -6668,6 +6668,84 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    /// The CLIENT-side network plane a real session uses: `socket` (198) ->
+    /// `connect` (203) -> `sendto`/`recvfrom` (206/207) to a REAL TCP peer on
+    /// the host. A logged-in session's TLS/HTTPS stack (bionic+boringssl inside
+    /// the guest) funnels byte I/O through exactly these syscalls, so proving
+    /// them end-to-end against an external listener (not a pre-connected
+    /// socketpair) is the network analog of the socketpair/generic-wait proofs.
+    /// The guest talks to the host's loopback IPv4 just as it would to a real
+    /// Roblox API host, so no host-side socket surgery is needed.
+    #[test]
+    fn guest_svc_client_socket_connect_send_recv_to_real_peer() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let ln = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let addr = ln.local_addr().unwrap();
+        let (tx_payload, rx_payload) = std::sync::mpsc::channel::<Vec<u8>>();
+        // Server thread: read the guest's payload, ship it over the channel,
+        // then echo "PONG" back so the guest recv() has something to read.
+        let srv = std::thread::spawn(move || {
+            let (mut sock, _) = ln.accept().expect("accept");
+            let mut buf = [0u8; 128];
+            let n = sock.read(&mut buf).expect("server read");
+            tx_payload.send(buf[..n].to_vec()).unwrap();
+            sock.write_all(b"PONG").unwrap();
+            sock.flush().unwrap();
+        });
+
+        let mut st = CpuState::new();
+        let mut do_svc = |a: [u64; 6], nr: u64| -> i64 {
+            st.x[0..6].copy_from_slice(&a);
+            st.x[8] = nr;
+            guest_svc(&mut st as *mut CpuState) as i64
+        };
+
+        // socket(AF_INET=2, SOCK_STREAM=1, 0) -> fd
+        let fd = do_svc([libc::AF_INET as u64, libc::SOCK_STREAM as u64, 0, 0, 0, 0], 198) as i32;
+        assert!(fd >= 0, "socket() failed: {fd}");
+
+        // connect(fd, sockaddr_in{AF_INET, port, 127.0.0.1}, 16)
+        let mut sa: libc::sockaddr_in = unsafe { std::mem::zeroed() };
+        sa.sin_family = libc::AF_INET as libc::sa_family_t;
+        sa.sin_port = addr.port().to_be();
+        // sin_addr.s_addr must be in network byte order; the portable form is
+        // the native-word interpretation of [127,0,0,1] (memory bytes 7F 00 00
+        // 01), equivalent to htonl(INADDR_LOOPBACK).
+        let loopback: std::net::Ipv4Addr = "127.0.0.1".parse().unwrap();
+        sa.sin_addr.s_addr = u32::from_ne_bytes(loopback.octets());
+        let r = do_svc(
+            [fd as u64, (&sa as *const libc::sockaddr_in) as u64, std::mem::size_of::<libc::sockaddr_in>() as u64, 0, 0, 0],
+            203,
+        );
+        assert_eq!(r, 0, "connect() to 127.0.0.1:{} failed: {r}", addr.port());
+
+        // sendto(fd, "SESSDATA\n", 9, 0, NULL, 0) — a small login payload write.
+        let payload = b"SESSDATA\n";
+        let n = do_svc(
+            [fd as u64, payload.as_ptr() as u64, payload.len() as u64, 0, 0, 0],
+            206,
+        );
+        assert_eq!(n, payload.len() as i64, "sendto() wrote wrong count: {n}");
+
+        // recvfrom(fd, buf, 8, 0, NULL, NULL) -> "PONG"
+        let mut buf = [0u8; 8];
+        let n = do_svc(
+            [fd as u64, buf.as_mut_ptr() as u64, buf.len() as u64, 0, 0, 0],
+            207,
+        );
+        assert_eq!(n, 4, "recvfrom() got wrong count: {n}");
+        assert_eq!(&buf[..4], b"PONG", "recvfrom() peer echo mismatch");
+
+        assert_eq!(do_svc([fd as u64, 0, 0, 0, 0, 0], 57), 0, "close()");
+
+        // The peer must have received exactly the guest's sendto() payload.
+        let got = rx_payload.recv_timeout(std::time::Duration::from_secs(10)).expect("server got payload");
+        assert_eq!(got, payload.to_vec(), "peer received wrong bytes");
+        srv.join().unwrap();
+    }
+
     /// timerfd (85/86/87) and signalfd4 (74) — the ALooper/libutils timeout &
     /// signal-fd primitives Roblox's event loop waits on. timerfd_create must
     /// return a real fd, settime arms it, gettime reflects the pending value, and
