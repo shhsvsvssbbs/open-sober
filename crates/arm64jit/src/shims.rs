@@ -99,31 +99,103 @@ extern "C" fn bionic_android_log(
     1
 }
 
-// ---- Android AssetManager/AAsset shims (QEMU-consistent: NULL/0) ----
+// ---- Android AssetManager/AAsset shims (real, image-backed) ----
+//
+// Recon-v2 (docs/recon-framework-boot-order.md) names the AssetManager the
+// "precondition for a frame": the engine reads its UI content (FoundationImages
+// sprite sheets, fonts, GLSL shader packs) out of the APK's `assets/` via
+// AAssetManager. The old shims returned NULL/0 for every call, so the engine
+// could not load a single real asset even if a self-driven frame were produced.
+// These shims are backed by a host `assets/` root (sober-core extracts the APK's
+// assets there; SOBER_ASSETS_ROOT env) and serve real bytes via stable host
+// buffers the guest derefs directly (guest vaddr == host addr in this JIT).
+use std::path::PathBuf;
+
+/// Host directory containing the extracted source APK `assets/` (paths relative
+/// to it, mirroring AAssetManager_open semantics). Unset => assets unmounted.
+fn assets_root() -> Option<PathBuf> {
+    std::env::var_os("SOBER_ASSETS_ROOT").map(PathBuf::from)
+}
+
+/// Open-asset table: AAsset* handle -> owned bytes (Box keeps the buffer's heap
+/// pointer stable: the box is never moved after allocation, so AAsset_getBuffer
+/// can return a pointer the guest reads directly).
+fn open_assets() -> &'static Mutex<std::collections::HashMap<u64, Box<[u8]>>> {
+    static OA: OnceLock<Mutex<std::collections::HashMap<u64, Box<[u8]>>>> = OnceLock::new();
+    OA.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn next_asset_handle() -> u64 {
+    static HANDLE: AtomicU64 = AtomicU64::new(0x1000);
+    HANDLE.fetch_add(1, AtomicOrdering::Relaxed)
+}
+
+/// AssetManager handle: a stable non-NULL sentinel (there is no real Java
+/// AssetManager headlessly; the manager identity is the host assets root).
+const ASSET_MANAGER: u64 = 0x7f000000_0001;
+
 extern "C" fn aassetmanager_fromjava(
     _env: u64, _instance: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
-    0 // static manager handle (NULL: no assets mounted)
+    ASSET_MANAGER
 }
+
+/// Resolve a guest C-string filename and, if it exists under the assets root,
+/// read it into an owned buffer, register an AAsset* handle, and return it.
 extern "C" fn aassetmanager_open(
-    _mgr: u64, _filename: u64, _mode: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+    _mgr: u64, filename: u64, _mode: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
-    0 // AAsset* NULL => open fails
+    let Some(root) = assets_root() else {
+        return 0;
+    };
+    if filename == 0 {
+        return 0;
+    }
+    let Ok(name) = unsafe { std::ffi::CStr::from_ptr(filename as *const std::ffi::c_char) }
+        .to_str()
+    else {
+        return 0;
+    };
+    // The engine's asset names are relative ("shaders/foo.pack"); AAssetManager
+    // echoes the same path back. Normalize any absolute assets/ prefix away.
+    let rel = name.strip_prefix("assets/").unwrap_or(name);
+    let joined = root.join(rel);
+    let Ok(bytes) = std::fs::read(&joined) else {
+        return 0;
+    };
+    let boxed: Box<[u8]> = bytes.into_boxed_slice();
+    let h = next_asset_handle();
+    open_assets().lock().unwrap().insert(h, boxed);
+    h
 }
+
 extern "C" fn aasset_close(
-    _asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+    asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
+    open_assets().lock().unwrap().remove(&asset);
     0
 }
+
 extern "C" fn aasset_getbuffer(
-    _asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+    asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
-    0
+    open_assets()
+        .lock()
+        .unwrap()
+        .get(&asset)
+        .map(|b| b.as_ptr() as u64)
+        .unwrap_or(0)
 }
+
 extern "C" fn aasset_getlength(
-    _asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+    asset: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
-    0
+    open_assets()
+        .lock()
+        .unwrap()
+        .get(&asset)
+        .map(|b| b.len() as u64)
+        .unwrap_or(0)
 }
 
 // ---- AConfiguration: report a tablet-ish screen so Roblox picks a UI size ----
@@ -940,6 +1012,66 @@ mod tests {
     #[test]
     fn bionic_errno_returns_valid_pointer() {
         assert!(crate::shims::bionic_errno(0, 0, 0, 0, 0, 0, 0, 0) != 0);
+    }
+
+    /// Asset shims serialize the process-wide open-asset table, so they are
+    /// driven under a lock (the test harness runs tests in parallel).
+    fn asset_test_lock() -> &'static Mutex<()> {
+        static L: OnceLock<Mutex<()>> = OnceLock::new();
+        L.get_or_init(|| Mutex::new(()))
+    }
+
+    /// The AAssetManager shims must serve REAL asset bytes once a host assets
+    /// root points at the extracted source-APK `assets/` (recon-v2's
+    /// "precondition for a frame": the engine reads its UI content here). A
+    /// guest filename (a plain pointer — guest==host in this JIT) opens into a
+    /// stable buffer whose length and data the getters return. Unmounted / bad
+    /// paths must still fail NULL/0 so boot is untouched.
+    #[test]
+    fn aassetmanager_serves_real_asset_bytes_from_assets_root() {
+        let _g = asset_test_lock().lock().unwrap();
+        let dir = std::env::temp_dir().join(format!("os-assetshim-{}", std::process::id()));
+        // SOBER_ASSETS_ROOT mirrors the source APK's `assets/` directory: the
+        // engine passes assets-relative names (e.g. "shaders/ui.pack").
+        let assets = dir.join("assets");
+        std::fs::create_dir_all(assets.join("shaders")).unwrap();
+        let payload = b"STABLE-GLSL-PACK\x00\x01\x02";
+        std::fs::write(assets.join("shaders/ui.pack"), payload).unwrap();
+        unsafe { std::env::set_var("SOBER_ASSETS_ROOT", &assets) };
+
+        // fromJava yields a stable non-NULL manager even headlessly.
+        let mgr = aassetmanager_fromjava(0, 0, 0, 0, 0, 0, 0, 0);
+        assert_ne!(mgr, 0);
+
+        // Open a relative asset name (the exact AAssetManager_open contract).
+        let name = b"shaders/ui.pack\0";
+        let h = aassetmanager_open(
+            mgr, name.as_ptr() as u64, 0, 0, 0, 0, 0, 0,
+        );
+        assert_ne!(h, 0, "real asset under assets root must open");
+        assert_eq!(aasset_getlength(h, 0, 0, 0, 0, 0, 0, 0), payload.len() as u64);
+        let buf = aasset_getbuffer(h, 0, 0, 0, 0, 0, 0, 0);
+        assert_ne!(buf, 0);
+        let got = unsafe { std::slice::from_raw_parts(buf as *const u8, payload.len()) };
+        assert_eq!(got, payload, "guest sees the exact extracted asset bytes");
+
+        // An "assets/"-prefixed path normalizes to the same file.
+        let prefixed = b"assets/shaders/ui.pack\0";
+        let h2 = aassetmanager_open(mgr, prefixed.as_ptr() as u64, 0, 0, 0, 0, 0, 0);
+        assert_ne!(h2, 0);
+        assert_eq!(aasset_getlength(h2, 0, 0, 0, 0, 0, 0, 0), payload.len() as u64);
+
+        // close frees the handle (getters then answer 0).
+        aasset_close(h2, 0, 0, 0, 0, 0, 0, 0);
+        assert_eq!(aasset_getlength(h2, 0, 0, 0, 0, 0, 0, 0), 0);
+
+        // Missing / unmounted still fail NULL/0 (boot-facing safety).
+        let missing = b"shaders/does_not_exist.pack\0";
+        assert_eq!(aassetmanager_open(mgr, missing.as_ptr() as u64, 0, 0, 0, 0, 0, 0), 0);
+        assert_eq!(aassetmanager_open(0, 0, 0, 0, 0, 0, 0, 0), 0);
+
+        unsafe { std::env::remove_var("SOBER_ASSETS_ROOT") };
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// The native-window layer is coherent: ANativeWindow_fromSurface hands out a

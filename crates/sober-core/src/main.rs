@@ -18,7 +18,7 @@ mod android_env;
 mod dirs_setup;
 
 use clap::Parser;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
 #[command(name = "open-sober", about = "Open-source Roblox Linux runtime")]
@@ -134,6 +134,16 @@ fn run_play(cli: &Cli, cfg: &config::SoConfig) -> anyhow::Result<()> {
         let libs = apk::extract_libs(&apk_path, &env.root)?;
         let bin = qemu::find_main_binary(&libs)?;
         info!("Main Roblox binary for JIT: {}", bin.display());
+        // Source the engine's REAL UI content for its own AAssetManager (recon-v2
+        // "precondition for a frame"): extract the APK's assets/ and export the
+        // host root the JIT asset shims read. The spawned elfjit inherits it, so
+        // a self-driven frame serving real sprites/fonts/shader-packs just works.
+        if let Some(assets) = apk::extract_assets(&apk_path, &env.root)? {
+            info!("Serving engine assets from {}", assets.display());
+            unsafe { std::env::set_var("SOBER_ASSETS_ROOT", assets.as_os_str()) };
+        } else {
+            warn!("APK carried no assets/; AAssetManager shims will serve NULL/0");
+        }
         return jitlaunch::launch_jit(&bin);
     }
 
