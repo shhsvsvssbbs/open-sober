@@ -2720,4 +2720,40 @@ mod tests {
         assert_eq!(got, payload.to_vec(), "peer received exactly the guest's login payload");
         srv.join().unwrap();
     }
+
+    /// The legacy resolution path (`gethostbyname`) the client ALSO imports: it
+    /// returns a static `hostent` (thread-local, no free) with a differently
+    /// shaped layout than getaddrinfo — h_addrtype@16, h_length@20, and
+    /// h_addr_list@24 (an array of pointers to packed in_addr). Pins that the
+    /// guest can call it via the resolver host-slot and read an AF_INET
+    /// address out, so a session using the old bionic API gets a usable host.
+    #[test]
+    fn guest_dns_gethostbyname_legacy_returns_hostent_addr() {
+        let gyb = resolve(b"gethostbyname").expect("host gethostbyname resolvable");
+
+        let hostname = Box::leak(b"localhost\0".to_vec().into_boxed_slice());
+        let mut img: Vec<u8> = Vec::new();
+        img.extend_from_slice(&0xd63f0200u32.to_le_bytes()); // blr x16
+        img.extend_from_slice(&0xd4200000u32.to_le_bytes()); // brk #0
+
+        let mut st = CpuState::new();
+        st.x[0] = hostname.as_ptr() as u64;
+        st.x[16] = gyb;
+        let he = jit_run(&img, 0x1000, 0x1000, &mut st as *mut CpuState).expect("gethostbyname blr");
+        assert!(he != 0, "gethostbyname(localhost) must return a hostent");
+
+        // aarch64 LP64 hostent layout: h_name@0, h_aliases@8, h_addrtype@16,
+        // h_length@20, h_addr_list@24 (char** -> each in_addr 4 bytes).
+        let addrtype = unsafe { std::ptr::read_unaligned((he + 16) as *const i32) };
+        let length = unsafe { std::ptr::read_unaligned((he + 20) as *const i32) };
+        let addr_list = unsafe { std::ptr::read_unaligned((he + 24) as *const u64) };
+        assert_eq!(addrtype, libc::AF_INET as i32, "h_addrtype must be AF_INET");
+        assert_eq!(length, 4, "h_length must be 4 (IPv4)");
+        assert!(addr_list != 0, "h_addr_list non-null");
+        let first = unsafe { std::ptr::read_unaligned(addr_list as *const u64) };
+        assert!(first != 0, "h_addr_list[0] non-null");
+        let saddr = unsafe { std::ptr::read_unaligned(first as *const u32) };
+        let ip = std::net::Ipv4Addr::from(saddr.to_ne_bytes());
+        assert_eq!(ip, std::net::Ipv4Addr::LOCALHOST, "gethostbyname(localhost) -> {ip}");
+    }
 }
