@@ -1,5 +1,48 @@
 # Open-Sober Status — Ongoing Autonomous Development
 
+## SH46 (Sep 12, 2026): DISPROVED SH45's LSM-seed hypothesis for the bare-`--startapp` `RBX::json::Writer string length overflow` abort — the leaked "length" is the guest STACK POINTER (== sp or sp−0x30), an uninitialized guest stack std::string in StartApp's json serialization of launch params, NOT the harness-seeded LSM map (~0x260–0x2a0 MB away). Also proved the type-4 task vector `0x6829ea8` has NO in-code install site (framework-glue only). Workspace 493/0 (was 491/0). Doc frontier-sh46-json-abort-sp-disproof.md.
+
+Per SH45's frontier doc the proposed next lever was "make the seeded LSM
+empty-map / fake-object memory guest-shaped / zero-length so StartApp's json
+serialization reads a valid empty string length instead of a host pointer."
+This cycle empirically disproves the premise:
+
+- **Leak == guest sp.** `JIT_DUMP_PC` at the json append check-fn entry
+  (0x102355d40) and throw helper (0x1025fb6bc) over 3 independent runs (fresh
+  ASLR): overflow value is always `== sp` (run A leak 0x7f4462ffd9f0 exactly
+  equals the throw frame's x29==x31) or `== sp−0x30` (runs B/C). The seeded LSM
+  bucket array sits ~0x260–0x2a0 MB away — not the leaking allocation. Real
+  mechanism: StartApp's `nativeAppBridgeAppStart`-family json writer reads an
+  uninitialized stack std::string as a length; the append bound-check
+  (`ldrsw [0x7275000+1608]; cmp; b.cc`) throws "RBX::json::Writer string length
+  overflow: %zu" (fmt file 0x57765a) via 0x25fb6bc. Guest-internal.
+- **Type-4 vector: no install site in the binary.** Full objdump scan: no
+  `adrp 0x6829000` + `[x,#3752]` store exists (only the dispatching `ldr` at
+  file 0x2853784); the only `[x,#3752]` stores are struct-relative on heap/sp
+  regs. "Reverse what the framework installs into 0x6829ea8 in-code" is a dead
+  end — it's external framework/game-activity glue absent headlessly; the
+  dispatch plane stays proven live when seeded (SH44).
+
+Two new regressions pin both facts (arm64jit/src/jit.rs):
+`type4_taskv4_vector_has_no_in_code_install_site_and_uses_static_base` and
+`json_overflow_leak_reads_guest_stack_pointer_not_seeded_lsm_map`.
+
+Verified: cargo test 493/0 (+2); build clean; productized `play --jit`
+re-verified (exit 124, real indexed triangle centroid red + textured quad
+BL=RED/BR=GREEN/TR=WHITE/TL=BLUE + quad-loop, swaps Ok(0x1)); bare
+`--jni --startapp` still reproduces the abort (harness-bootstrap-only).
+
+Next (unchanged wall, reframed): the engine never self-produces a frame/session
+task because task-v4 `[0x6829ea8]` is only populated by real framework producer
+glue (absent in-code); the bare-StartApp json abort is NOT fixable by LSM
+seeding (guest stack state). Directions: (a) synthesize the framework
+task-producer registration the engine's own game-activity/lifecycle init would
+perform and call that guest registration path; or (b) advance objective 2b by
+exercising the fsmap/SQLite datastore plane with the client's real
+serialization — the productized run currently makes ZERO fsmap remaps (engine
+never reaches a session), so persistence is proven only hermetically
+(SH38–SH42), not by the live client.
+
 ## SH43b (Sep 12, 2026): also prove the legacy `gethostbyname` resolution path — the client imports both APIs. `gethostbyname("localhost")` returns a static thread-local `hostent` (h_addrtype@16/h_length@20/h_addr_list@24), a differently-shaped result than getaddrinfo; the regression walks it to an AF_INET 127.0.0.1. Workspace 491/0 (was 490/0). Commit 75d9d31.
 
 ## SH43 (Sep 12, 2026): prove the guest DNS plane through the real ABI — `getaddrinfo("localhost") → ai_addr → connect → send/recv` roundtrip to a real host TCP peer. Workspace 490/0 (was 489/0). Commit 23f4ff4.

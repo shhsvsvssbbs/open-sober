@@ -1,0 +1,27 @@
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x560de4cf1d18
+[plt] bound 534 JUMP_SLOT + 67 GLOB_DAT/ABS64 (0 unresolved), 11 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7f1ec59d0010 (4194304 buckets, shared zero sub @0x7f1ec79d0010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7f1ec59d0010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x560e1c573770 tls(tpidr)=0x560e1c573880
+JNI boot: x0 = JavaVM* 0x560e1c15ea50
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x560e1c15ea20 jobject=0x560e1c6b0970 params=0x560e1c821350)
+DUMPPC pc=0x102355d40 x0=0x7f1eb003fe50 x1=0x106b0aa69 x2=0x0 x3=0x0 x4=0xb3 x5=0x1 x6=0x0 x7=0x0 x8=0x102355d40 x9=0x0 x10=0x0 x11=0x7f1eb002a330 x12=0xb3 x13=0x5c x14=0x0 x15=0x0 x16=0x1 x17=0x41 x18=0x0 x19=0xb3 x20=0x7f1eb002a330 x21=0x7f1ebe477ab0 x22=0x7f1ebe477b48 x23=0x0 x24=0x560de4cf1d10 x25=0x7f1eb0043b70 x26=0x0 x27=0x0 x28=0x0 x29=0x7f1ebe477a20 x30=0x1021e5244 x31=0x7f1ebe477a20
+DUMPPC pc=0x102355d40 x0=0x7f1eb003fe50 x1=0x7f1eb002a330 x2=0xb3 x3=0x0 x4=0xb3 x5=0x1 x6=0x0 x7=0x0 x8=0x102355d40 x9=0x7f1eb00443e0 x10=0x7f1eb0049192 x11=0x7f1eb0049193 x12=0xb3 x13=0x5c x14=0x0 x15=0x0 x16=0x1 x17=0x41 x18=0x0 x19=0xb3 x20=0x7f1eb002a330 x21=0x7f1ebe477ab0 x22=0x7f1ebe477b48 x23=0x0 x24=0x560de4cf1d10 x25=0x7f1eb0043b70 x26=0x0 x27=0x0 x28=0x0 x29=0x7f1ebe477a20 x30=0x1021e5260 x31=0x7f1ebe477a20
+libc++abi: terminating due to uncaught exception of type std::runtime_error : RBX::json::Writer string length overflow: 139770018101744

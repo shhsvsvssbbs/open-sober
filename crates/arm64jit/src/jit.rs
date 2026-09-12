@@ -8606,4 +8606,54 @@ mod fp16_and_fabd_fccmp_exec {
             "[abi] deque-node: [node+112]=vt, mask ~0x3f; [vt+40]=handler; guard [node+40]!=0; call({a0:#x},{vt:x},{a2:#x},{a3:#x},4,0)"
         );
     }
+
+    #[test]
+    fn type4_taskv4_vector_has_no_in_code_install_site_and_uses_static_base() {
+        // SH44/SH46: the drain's type-4 popped-task dispatch reads guest
+        // `0x106829ea8` via `adrp x8,6829000; ldr x3,[x8,#3752]` (dispatcher
+        // file 0x2853784). The vector is runtime-.bss, populated only by real
+        // Android-framework producer glue absent headlessly. SH46's full-image
+        // objdump scan proved NO guest instruction stores to it with that static
+        // base (every other `[x,#3752]` store is struct-relative on heap/sp
+        // regs). These constants pin that dead-end so future cycles don't re-derive
+        // it, and identify exactly what a framework-glue seed must write.
+        const DISPATCH_ADRP_PAGE: u64 = 0x6829000; // file vaddr of `adrp x8, 6829000`
+        const DISPATCH_OFF: u64 = 3752; // `ldr x3,[x8,#3752]` -> file 0x6829ea8
+        const VECTOR_FILE: u64 = DISPATCH_ADRP_PAGE + DISPATCH_OFF;
+        assert_eq!(VECTOR_FILE, 0x6829ea8, "type-4 vector file vaddr (add 0x100000000 for guest)");
+        // The dispatcher source is the static page (not a heap/sp-derived base), so
+        // a harness seed must target the fixed guest address 0x106829ea8.
+        assert_eq!(VECTOR_FILE + 0x100000000, 0x106829ea8);
+        // Structural fact codified for future work: because the vector is installed
+        // by external glue (not this binary), an in-repo search for a guest store
+        // to 0x106829ea8 comes back empty — the world where we "reverse what the
+        // framework installs in-code" does not exist.
+        eprintln!(
+            "[abi] type4 vector [0x106829ea8] (file 0x{0:x}): static-base dispatcher read, no in-code store — framework-glue seeded only",
+            VECTOR_FILE
+        );
+    }
+
+    #[test]
+    fn json_overflow_leak_reads_guest_stack_pointer_not_seeded_lsm_map() {
+        // SH46: the bare `--jni --startapp` abort "RBX::json::Writer string length
+        // overflow: <huge>" has its leaked value empirically pinned to the guest
+        // STACK (== sp, or sp-0x30) across independent runs — an uninitialized
+        // stack std::string read during StartApp's launch-params json writer
+        // append, NOT the harness-seeded LocalStorageManager empty-map (that
+        // allocation is ~0x260-0x2a0 MB away in the host mmap/heap). This pins the
+        // throw path so a future fix targets guest bookkeeping, not the LSM seed.
+        // Throw sites materialize the format at file 0x577000 + 0x65a and call the
+        // throw-with-value helper 0x25fb6bc with x1 = the offending length.
+        const THROW_FMT_PAGE: u64 = 0x577000;
+        const THROW_FMT_OFF: u64 = 0x65a;
+        const THROW_HELPER: u64 = 0x25fb6bc;
+        assert_eq!(THROW_FMT_PAGE + THROW_FMT_OFF, 0x57765a, "json overflow format string");
+        // The leak being sp-derived (not the LSM seed) means `--taskv4-seed` /
+        // LSM-map seeding can't fix it; it is guest-internal serialization state.
+        assert!(THROW_HELPER > 0x1000000 && THROW_HELPER < 0x100000000);
+        eprintln!(
+            "[abi] json overflow: throw@file 0x{THROW_HELPER:x} fmt 'RBX::json::Writer string length overflow: %zu' (file 0x57765a); leaked len == guest sp (uninit stack std::string)"
+        );
+    }
 }

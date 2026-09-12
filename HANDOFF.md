@@ -1,6 +1,56 @@
 # Open Sober — Agent Handoff
 
-## Session (Sep 12, 2026, hermes-worker, cycle SH45) — characterized the bare-StartApp `RBX::json::Writer string length overflow` abort (a run-variable host heap pointer leaked from the seeded empty-LSM-map into a guest json string-length read) and gave elfjit an abort-class crash dumper. Workspace 491/0. Commit 9b99fac.
+## Session (Sep 12, 2026, hermes-worker, cycle SH46) — DISPROVED the SH45 LSM-seed hypothesis for the bare-`--startapp` `RBX::json::Writer string length overflow` abort: the leaked "length" is the guest STACK POINTER (== sp, or sp−0x30), an uninitialized stack std::string in StartApp's launch-params json serialization — not the harness-seeded LSM map (~0x260–0x2a0 MB away). Also proves the type-4 task vector `0x6829ea8` has NO in-code install site (framework-glue only). Workspace 493/0 (was 491/0). Commit pending.
+
+SH45 left the type-4 producer vector `0x6829ea8` as the open standing frontier and
+suggested a concrete next lever: "make the seeded LSM empty-map / fake-object
+memory guest-shaped / zero-length so StartApp's json serialization reads a valid
+empty string length instead of a host pointer." This cycle **empirically
+disproves that hypothesis** and redirects the frontier:
+
+- **The leaked "string length" is a guest stack address, not the LSM seed.**
+  Driving `JIT_DUMP_PC` at the json append check-fn entry (0x102355d40) and the
+  throw helper (0x1025fb6bc) across three independent runs (fresh ASLR each):
+  the overflow value is always `== sp` (run A: leak `0x7f4462ffd9f0` exactly
+  equals x29==x31/sp of the throw frame) or `== sp−0x30` (run B/C), tracked to
+  within a small constant. The seeded LSM bucket array sits ~0x260–0x2a0 MB away
+  in the host mmap/heap and is **not** the leaking allocation. So the real
+  mechanism is guest-internal: StartApp's `nativeAppBridgeAppStart`-family json
+  writer reads an **uninitialised std::string on the guest stack** as a length,
+  trips `ldrsw x8,[0x7275000+1608]; cmp x8,x2; b.cc` in the append bound-check,
+  and throws from `RBX::json::Writer string length overflow: %zu` (format file
+  0x57765a) via the throw-with-value helper 0x25fb6bc.
+- **The type-4 producer vector has no guest install site.** A full-image objdump
+  scan for `adrp 0x6829000` + `[x,#3752]` stores proves no curso instruction
+  writes guest `0x106829ea8` (the only `[x,#3752]` stores are struct-relative on
+  heap/sp regs; the dispatcher at file 0x2853784 is the sole static-base reader).
+  "Reverse what the framework installs into the vector in-code" is a confirmed
+  dead end — the install is external framework/GL game-activity glue absent
+  headlessly. The dispatch plane remains proven live when seeded (SH44).
+
+Two new regression tests pin both facts for future cycles
+(arm64jit/src/jit.rs): `type4_taskv4_vector_has_no_in_code_install_site_and_
+uses_static_base` and `json_overflow_leak_reads_guest_stack_pointer_not_seeded_
+lsm_map`. Doc: docs/frontier-sh46-json-abort-sp-disproof.md. Productized
+`play --jit` re-verified green (exit 124, real indexed triangle + textured quad
++ quad-loop, swaps Ok(0x1)); bare `--jni --startapp` still reproduces the abort
+(as documented, harness-bootstrap-only).
+
+**Next (reframed frontier):** the standing structural wall is unchanged — the
+engine never self-produces a frame/session task because task-v4 `[0x6829ea8]`
+is populated only by real framework producer glue (now proven absent in-code).
+And the bare-StartApp json abort is NOT fixable by LSM seeding (it's guest
+stack state). Future directions: (a) since the vector is glue-installed, the
+remaining host lever is to synthesize the FRAMEWORK task-producer registration
+it performs (find, from the engine's own game-activity/lifecycle init, how it
+would register a producer and call that guest registration path); or (b) keep
+advancing objective 2b by exercising the now-hermetic fsmap/SQLite datastore
+plane with the client's real serialization—the productized `play --jit` run
+currently makes ZERO fsmap remaps because the engine never reaches a session,
+so the persistence claim remains proven only hermetically (SH38–SH42), not by
+the live client.
+
+## Session (Sep 12, 2026, hermes-worker, cycle SH45) — characterized the bare-StartApp `RBX::json::Writer string length overflow` abort (a run-variable host heap pointer leaked from the seeded empty-LSM-map into a guest json string-length read) and gave elfjit an abort-class crash dumper. Workspace 491/0 (was 490/0). Commits 9b99fac, 3ada26e.
 
 The SH44 documented open item — "bare-StartApp `RBX::json::Writer string length
 overflow` abort (harness LSM host-pointer seed leaking into a string-length read
