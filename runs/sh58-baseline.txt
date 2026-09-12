@@ -1,0 +1,782 @@
+warning: unnecessary parentheses around `match` scrutinee expression
+    --> crates/arm64jit/src/decode.rs:1650:29
+     |
+1650 |     if movewide && matches!((insn >> 24), 0x12 | 0x52 | 0x72 | 0x92 | 0xD2 | 0xF2) {
+     |                             ^          ^
+     |
+     = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+     |
+1650 -     if movewide && matches!((insn >> 24), 0x12 | 0x52 | 0x72 | 0x92 | 0xD2 | 0xF2) {
+1650 +     if movewide && matches!( insn >> 24, 0x12 | 0x52 | 0x72 | 0x92 | 0xD2 | 0xF2) {
+     |
+
+warning: unnecessary parentheses around `if` condition
+    --> crates/arm64jit/src/decode.rs:4924:364
+     |
+4924 | ...                   if ((insn & 0xffe0_0c00) == 0x0e00_0400 || (insn & 0xffe0_0c00) == 0x4e00_0400) {
+     |                          ^                                                                          ^
+     |
+help: remove these parentheses
+     |
+4924 -                                                                                                                                                                                                                                                                                                                                                                         if ((insn & 0xffe0_0c00) == 0x0e00_0400 || (insn & 0xffe0_0c00) == 0x4e00_0400) {
+4924 +                                                                                                                                                                                                                                                                                                                                                                         if (insn & 0xffe0_0c00) == 0x0e00_0400 || (insn & 0xffe0_0c00) == 0x4e00_0400 {
+     |
+
+warning: unnecessary parentheses around assigned value
+    --> crates/arm64jit/src/translate.rs:1090:22
+     |
+1090 |             let cc = (x86_cc_for_cond(cond)
+     |                      ^
+1091 |                 .ok_or_else(|| format!("CSel: bad cond {cond:#x}"))?
+1092 |                 - 0x40); // jcc 0x8X -> cmovcc 0x4X (subtract the 0x80 top byte)
+     |                       ^
+     |
+help: remove these parentheses
+     |
+1090 ~             let cc = x86_cc_for_cond(cond)
+1091 |                 .ok_or_else(|| format!("CSel: bad cond {cond:#x}"))?
+1092 ~                 - 0x40; // jcc 0x8X -> cmovcc 0x4X (subtract the 0x80 top byte)
+     |
+
+warning: unnecessary parentheses around assigned value
+    --> crates/arm64jit/src/translate.rs:1123:22
+     |
+1123 |             let cc = (x86_cc_for_cond(cond)
+     |                      ^
+1124 |                 .ok_or_else(|| format!("FcSel: bad cond {cond:#x}"))?
+1125 |                 - 0x40); // jcc 0x8X -> cmovcc 0x4X
+     |                       ^
+     |
+help: remove these parentheses
+     |
+1123 ~             let cc = x86_cc_for_cond(cond)
+1124 |                 .ok_or_else(|| format!("FcSel: bad cond {cond:#x}"))?
+1125 ~                 - 0x40; // jcc 0x8X -> cmovcc 0x4X
+     |
+
+warning: unnecessary parentheses around method argument
+    --> crates/arm64jit/src/translate.rs:2923:63
+     |
+2923 | ...                   buf.mov_ri64(RCX, (((1023 + fbits as u64) << 52)));
+     |                                         ^                             ^
+     |
+help: remove these parentheses
+     |
+2923 -                                             buf.mov_ri64(RCX, (((1023 + fbits as u64) << 52)));
+2923 +                                             buf.mov_ri64(RCX, ((1023 + fbits as u64) << 52));
+     |
+
+warning: unnecessary parentheses around assigned value
+    --> crates/arm64jit/src/translate.rs:4101:139
+     |
+4101 | ...                   let off = (i as i32);
+     |                                 ^        ^
+     |
+help: remove these parentheses
+     |
+4101 -                                                                                                                                 let off = (i as i32);
+4101 +                                                                                                                                 let off = i as i32;
+     |
+
+warning: unused variable: `b1`
+    --> crates/arm64jit/src/decode.rs:3137:21
+     |
+3137 |                 let b1 = (insn >> 16) & 0xff;
+     |                     ^^ help: if this is intentional, prefix it with an underscore: `_b1`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `b1`
+    --> crates/arm64jit/src/decode.rs:3179:21
+     |
+3179 |                 let b1 = (insn >> 16) & 0xff;
+     |                     ^^ help: if this is intentional, prefix it with an underscore: `_b1`
+
+warning: unused variable: `bits`
+    --> crates/arm64jit/src/decode.rs:3798:13
+     |
+3798 |         let bits = if sf { 64u32 } else { 32u32 };
+     |             ^^^^ help: if this is intentional, prefix it with an underscore: `_bits`
+
+warning: unused variable: `b1q`
+    --> crates/arm64jit/src/decode.rs:4826:281
+     |
+4826 | ...                   let b1q = (b0s >> 1) & 1; // byte0 bit1 == sq (sign dst) family bit
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_b1q`
+
+warning: variable does not need to be mutable
+    --> crates/arm64jit/src/jit.rs:1346:17
+     |
+1346 |             let mut empty: libc::sigset_t = core::mem::zeroed();
+     |                 ----^^^^^
+     |                 |
+     |                 help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary `unsafe` block
+    --> crates/arm64jit/src/jit.rs:1769:5
+     |
+1769 |     unsafe { sha1_host_impl(s, packed) };
+     |     ^^^^^^ unnecessary `unsafe` block
+     |
+     = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `image_base`
+    --> crates/arm64jit/src/jit.rs:2431:5
+     |
+2431 |     image_base: u64,
+     |     ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_image_base`
+
+warning: unused variable: `sf`
+    --> crates/arm64jit/src/translate.rs:2117:13
+     |
+2117 |             sf,
+     |             ^^ help: try ignoring the field: `sf: _`
+
+warning: unused variable: `sb`
+    --> crates/arm64jit/src/translate.rs:3503:22
+     |
+3503 |                 let (sb, hb): (i32, i32) = match e {
+     |                      ^^ help: if this is intentional, prefix it with an underscore: `_sb`
+
+warning: unused variable: `hb`
+    --> crates/arm64jit/src/translate.rs:3503:26
+     |
+3503 |                 let (sb, hb): (i32, i32) = match e {
+     |                          ^^ help: if this is intentional, prefix it with an underscore: `_hb`
+
+warning: unused variable: `q`
+    --> crates/arm64jit/src/translate.rs:4422:35
+     |
+4422 | Inst::SimdAddB { rd, rn, rm, sub, q } => {
+     |                                   ^ help: try ignoring the field: `q: _`
+
+warning: unused variable: `q`
+    --> crates/arm64jit/src/translate.rs:4483:35
+     |
+4483 | Inst::SimdAddH { rd, rn, rm, sub, q } => {
+     |                                   ^ help: try ignoring the field: `q: _`
+
+warning: unused variable: `ebits`
+    --> crates/arm64jit/src/translate.rs:5328:25
+     |
+5328 |                     let ebits = 8 * (esize as i32);
+     |                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_ebits`
+
+warning: unused variable: `wide`
+    --> crates/arm64jit/src/translate.rs:6319:340
+     |
+6319 | ...                   Inst::SimdLaneGp { rd, rn, esize, index, sign, wide } => {
+     |                                                                      ^^^^ help: try ignoring the field: `wide: _`
+
+warning[E0133]: call to unsafe function `libc::dlsym` is unsafe and requires unsafe block
+  --> crates/arm64jit/src/resolver.rs:68:5
+   |
+68 |     libc::dlsym(handle, name)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+   |
+   = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+  --> crates/arm64jit/src/resolver.rs:67:1
+   |
+67 | unsafe fn sym_from(handle: *mut libc::c_void, name: *const libc::c_char) -> *mut libc::c_void {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+   = note: `#[warn(unsafe_op_in_unsafe_fn)]` (part of `#[warn(rust_2024_compatibility)]`) on by default
+
+warning[E0133]: call to unsafe function `std::ptr::const_ptr::<impl *const T>::add` is unsafe and requires unsafe block
+   --> crates/arm64jit/src/resolver.rs:112:13
+    |
+112 |         p = p.add(1);
+    |             ^^^^^^^^ call to unsafe function
+    |
+    = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+   --> crates/arm64jit/src/resolver.rs:100:1
+    |
+100 | unsafe fn read_guest_cstr(ptr: u64, cap: usize) -> Option<Vec<u8>> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `std::ptr::read_unaligned` is unsafe and requires unsafe block
+   --> crates/arm64jit/src/resolver.rs:559:5
+    |
+559 |     core::ptr::read_unaligned((sp + 8 * (n as u64 - 8)) as *const u64)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+    |
+    = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+   --> crates/arm64jit/src/resolver.rs:557:1
+    |
+557 | unsafe fn gs_stack(st: &CpuState, n: usize) -> u64 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:574:5
+    |
+574 |     unsafe { f(gs_f(s, 0), gs_f(s, 1), gs_f(s, 2), gs_f(s, 3)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:580:5
+    |
+580 |     unsafe { f(gs_f(s, 0), gs_f(s, 1), gs_f(s, 2), gs_f(s, 3)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:586:5
+    |
+586 |     unsafe { f(gs_f(s, 0)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:592:5
+    |
+592 |     unsafe { f(gs_f(s, 0), gs_f(s, 1)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:598:5
+    |
+598 |     unsafe { f(gs_f(s, 0)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:604:5
+    |
+604 |     unsafe { f(gs_f(s, 0), gs_f(s, 1)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:612:5
+    |
+612 |     unsafe { f(gs_f(s, 0), gs_x(s, 1) as u8) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:621:5
+    |
+621 |     unsafe { f(gs_x(s, 0) as u32, gs_x(s, 1) as u32, gs_f(s, 2)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:635:5
+    |
+635 |     unsafe { f(gs_x(s, 0) as u32, gs_x(s, 1) as i32, gs_f(s, 0), gs_x(s, 2) as i32) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:643:5
+    |
+643 |     unsafe { f(gs_x(s, 0) as i32, gs_f(s, 1)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:650:5
+    |
+650 |     unsafe { f(gs_x(s, 0) as i32, gs_f(s, 1), gs_f(s, 2)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:657:5
+    |
+657 |     unsafe { f(gs_x(s, 0) as i32, gs_f(s, 1), gs_f(s, 2), gs_f(s, 3)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:664:5
+    |
+664 |     unsafe { f(gs_x(s, 0) as i32, gs_f(s, 1), gs_f(s, 2), gs_f(s, 3), gs_f(s, 4)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:672:5
+    |
+672 |     unsafe { f(gs_x(s, 0) as u32, gs_f(s, 1)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:679:5
+    |
+679 |     unsafe { f(gs_x(s, 0) as u32, gs_f(s, 1), gs_f(s, 2)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:686:5
+    |
+686 |     unsafe { f(gs_x(s, 0) as u32, gs_f(s, 1), gs_f(s, 2), gs_f(s, 3)) };
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/resolver.rs:693:5
+    |
+693 |     unsafe { f(
+    |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+    --> crates/arm64jit/src/resolver.rs:1023:5
+     |
+1023 |     unsafe { crate::jit::guest_svc(&mut st as *mut CpuState) }
+     |     ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `a7`
+    --> crates/arm64jit/src/resolver.rs:1008:5
+     |
+1008 |     a7: u64,
+     |     ^^ help: if this is intentional, prefix it with an underscore: `_a7`
+
+warning[E0133]: call to unsafe function `std::ptr::read_unaligned` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1085:16
+     |
+1085 |     let kind = core::ptr::read_unaligned(m.add(16) as *const i32);
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+    --> crates/arm64jit/src/resolver.rs:1081:1
+     |
+1081 | unsafe fn sanitize_mutex(m: *mut u8) {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `std::ptr::mut_ptr::<impl *mut T>::add` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1085:42
+     |
+1085 |     let kind = core::ptr::read_unaligned(m.add(16) as *const i32);
+     |                                          ^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `std::ptr::write_unaligned` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1086:5
+     |
+1086 |     core::ptr::write_unaligned(m.add(16) as *mut i32, kind & 3);
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `std::ptr::mut_ptr::<impl *mut T>::add` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1086:32
+     |
+1086 |     core::ptr::write_unaligned(m.add(16) as *mut i32, kind & 3);
+     |                                ^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `std::ptr::read_unaligned` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1231:17
+     |
+1231 |     let state = core::ptr::read_unaligned(m as *const u16);
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+    --> crates/arm64jit/src/resolver.rs:1227:1
+     |
+1227 | unsafe fn bionic_is_normal(m: *const u8) -> bool {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `resolver::bionic_is_normal` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1264:9
+     |
+1264 |     if !bionic_is_normal(m) {
+     |         ^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+    --> crates/arm64jit/src/resolver.rs:1255:1
+     |
+1255 | unsafe fn bionic_mutex_lock(m: *mut u8) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `resolver::bionic_state_ptr` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1295:20
+     |
+1295 |         futex_wait(bionic_state_ptr(m), locked_contended as u32, shared);
+     |                    ^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `resolver::bionic_is_normal` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1304:36
+     |
+1304 |     if is_glibc_initialized(m) || !bionic_is_normal(m) {
+     |                                    ^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+note: an unsafe function restricts its caller, but its body is safe by default
+    --> crates/arm64jit/src/resolver.rs:1300:1
+     |
+1300 | unsafe fn bionic_mutex_unlock(m: *mut u8) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning[E0133]: call to unsafe function `resolver::bionic_state_ptr` is unsafe and requires unsafe block
+    --> crates/arm64jit/src/resolver.rs:1316:20
+     |
+1316 |         futex_wake(bionic_state_ptr(m), 1, shared);
+     |                    ^^^^^^^^^^^^^^^^^^^ call to unsafe function
+     |
+     = note: consult the function's documentation for information on how to avoid undefined behavior
+     = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/unsafe-op-in-unsafe-fn.html>
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/shims.rs:706:15
+    |
+704 |     let bytes = unsafe {
+    |                 ------ because it's nested under this `unsafe` block
+705 |         let mut len = 0usize;
+706 |         while unsafe { *((fmt as *const u8).add(len)) } != 0 && len < 4096 {
+    |               ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> crates/arm64jit/src/shims.rs:754:35
+    |
+752 |                         let s = unsafe {
+    |                                 ------ because it's nested under this `unsafe` block
+753 |                             let mut n = 0usize;
+754 |                             while unsafe { *((p as *const u8).add(n)) } != 0 && n < 4096 {
+    |                                   ^^^^^^ unnecessary `unsafe` block
+
+warning: variable does not need to be mutable
+   --> crates/arm64jit/src/plt.rs:519:9
+    |
+519 |     let mut resolve_entry = |r_offset: u64, r_info: u64, r_addend: i64| -> usize {
+    |         ----^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: unused variable: `start`
+   --> crates/arm64jit/src/jni.rs:505:24
+    |
+505 |     _e: u64, arr: u64, start: u64, len: u64, src: u64, _a5: u64, _a6: u64, _a7: u64,
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_start`
+
+warning: unused variable: `start`
+   --> crates/arm64jit/src/jni.rs:519:24
+    |
+519 |     _e: u64, arr: u64, start: u64, len: u64, dst: u64, _a5: u64, _a6: u64, _a7: u64,
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_start`
+
+warning: direct cast of function item into an integer
+    --> crates/arm64jit/src/translate.rs:1477:46
+     |
+1477 |             let addr = crate::jit::guest_svc as usize as u64;
+     |                                              ^^^^^^^^
+     |
+     = note: `#[warn(function_casts_as_integer)]` on by default
+help: first cast to a pointer `as *const ()`
+     |
+1477 |             let addr = crate::jit::guest_svc as *const () as usize as u64;
+     |                                              ++++++++++++
+
+warning: direct cast of function item into an integer
+    --> crates/arm64jit/src/translate.rs:5629:71
+     |
+5629 | ...                   let addr = crate::jit::guest_sha1stem as usize as u64;
+     |                                                             ^^^^^^^^
+     |
+help: first cast to a pointer `as *const ()`
+     |
+5629 |                                 let addr = crate::jit::guest_sha1stem as *const () as usize as u64;
+     |                                                                       ++++++++++++
+
+warning: function `w_eglGetProcAddress` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:128:15
+    |
+128 | extern "C" fn w_eglGetProcAddress(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_egl_get_proc_address`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: function `w_glClearColor` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:571:15
+    |
+571 | extern "C" fn w_glClearColor(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_clear_color`
+
+warning: function `w_glBlendColor` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:577:15
+    |
+577 | extern "C" fn w_glBlendColor(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_blend_color`
+
+warning: function `w_glClearDepthf` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:583:15
+    |
+583 | extern "C" fn w_glClearDepthf(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_clear_depthf`
+
+warning: function `w_glDepthRangef` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:589:15
+    |
+589 | extern "C" fn w_glDepthRangef(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_depth_rangef`
+
+warning: function `w_glLineWidth` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:595:15
+    |
+595 | extern "C" fn w_glLineWidth(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_line_width`
+
+warning: function `w_glPolygonOffset` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:601:15
+    |
+601 | extern "C" fn w_glPolygonOffset(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_polygon_offset`
+
+warning: function `w_glSampleCoverage` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:609:15
+    |
+609 | extern "C" fn w_glSampleCoverage(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_sample_coverage`
+
+warning: function `w_glTexParameterf` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:618:15
+    |
+618 | extern "C" fn w_glTexParameterf(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_tex_parameterf`
+
+warning: function `w_glClearBufferfi` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:631:15
+    |
+631 | extern "C" fn w_glClearBufferfi(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_clear_bufferfi`
+
+warning: function `w_glUniform1f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:640:15
+    |
+640 | extern "C" fn w_glUniform1f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_uniform1f`
+
+warning: function `w_glUniform2f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:646:15
+    |
+646 | extern "C" fn w_glUniform2f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_uniform2f`
+
+warning: function `w_glUniform3f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:653:15
+    |
+653 | extern "C" fn w_glUniform3f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_uniform3f`
+
+warning: function `w_glUniform4f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:660:15
+    |
+660 | extern "C" fn w_glUniform4f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_uniform4f`
+
+warning: function `w_glVertexAttrib1f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:669:15
+    |
+669 | extern "C" fn w_glVertexAttrib1f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_vertex_attrib1f`
+
+warning: function `w_glVertexAttrib2f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:675:15
+    |
+675 | extern "C" fn w_glVertexAttrib2f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_vertex_attrib2f`
+
+warning: function `w_glVertexAttrib3f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:682:15
+    |
+682 | extern "C" fn w_glVertexAttrib3f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_vertex_attrib3f`
+
+warning: function `w_glVertexAttrib4f` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:689:15
+    |
+689 | extern "C" fn w_glVertexAttrib4f(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_vertex_attrib4f`
+
+warning: function `w_glTexImage2D` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:707:15
+    |
+707 | extern "C" fn w_glTexImage2D(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_tex_image2_d`
+
+warning: function `w_glTexSubImage2D` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:728:15
+    |
+728 | extern "C" fn w_glTexSubImage2D(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_tex_sub_image2_d`
+
+warning: function `w_glTexImage3D` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:748:15
+    |
+748 | extern "C" fn w_glTexImage3D(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_tex_image3_d`
+
+warning: function `w_glCompressedTexImage2D` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:775:15
+    |
+775 | extern "C" fn w_glCompressedTexImage2D(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_compressed_tex_image2_d`
+
+warning: function `w_glCompressedTexSubImage2D` should have a snake case name
+   --> crates/arm64jit/src/resolver.rs:808:15
+    |
+808 | extern "C" fn w_glCompressedTexSubImage2D(st: *mut CpuState) -> u64 {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `w_gl_compressed_tex_sub_image2_d`
+
+For more information about this error, try `rustc --explain E0133`.
+warning: variable does not need to be mutable
+   --> crates/sober-core/src/apk.rs:209:21
+    |
+209 |         if let Some(mut src) = (0..archive.len())
+    |                     ----^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+[2m2026-09-12T23:44:07.077171Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Open Sober v0.1.0-dev starting
+[2m2026-09-12T23:44:07.077243Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Config loaded: SoConfig { apk_path: None, qemu_path: "/usr/bin/qemu-aarch64", android_runtime_path: None, cache_dir: "/home/hermes-worker/.cache/open-sober", graphics: GraphicsConfig { width: 1280, height: 720, fullscreen: false, mesa_driver: Some("zink") }, quality: 5, fps_cap: Some(60), use_opengl: false, discord_rpc: false, extra_env: [] }
+[2m2026-09-12T23:44:07.077313Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m No auth token provided. Game will prompt for login.
+No auth token — Roblox will prompt for login in-game.
+[2m2026-09-12T23:44:07.077339Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m APK: /home/hermes-worker/.cache/open-sober/apks/roblox-android.apk
+[2m2026-09-12T23:44:07.077370Z[0m [32m INFO[0m [2mopen_sober::android_env[0m[2m:[0m Building android2gnulinux runtime...
+cc1: fatal error: src/wrapper/wrapper.c: No such file or directory
+compilation terminated.
+cc1: fatal error: src/linker/dlfcn.c: No such file or directory
+compilation terminated.
+cc1: fatal error: src/linker/linker.c: No such file or directory
+compilation terminated.
+cc1: fatal error: src/linker/linker_environ.c: No such file or directory
+compilation terminated.
+cc1: fatal error: src/linker/rt.c: No such file or directory
+compilation terminated.
+cc1: fatal error: src/linker/strlcpy.c: No such file or directory
+compilation terminated.
+[2m2026-09-12T23:44:07.091411Z[0m [33m WARN[0m [2mopen_sober::android_env[0m[2m:[0m android2gnulinux build failed — continuing without it
+[2m2026-09-12T23:44:07.091432Z[0m [33m WARN[0m [2mopen_sober::android_env[0m[2m:[0m android2gnulinux runtime not found — Bionic→glibc compat will be limited
+[2m2026-09-12T23:44:07.091446Z[0m [32m INFO[0m [2mopen_sober::android_env[0m[2m:[0m Setting up Android environment at: /home/hermes-worker/.cache/open-sober/android-env
+[2m2026-09-12T23:44:07.091540Z[0m [32m INFO[0m [2mopen_sober::android_env[0m[2m:[0m Android environment ready at: /home/hermes-worker/.cache/open-sober/android-env
+[2m2026-09-12T23:44:07.091551Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Android environment ready at: /home/hermes-worker/.cache/open-sober/android-env
+[2m2026-09-12T23:44:07.091560Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Launching via in-process JIT (no QEMU)...
+[2m2026-09-12T23:44:07.153558Z[0m [32m INFO[0m [2mopen_sober::apk[0m[2m:[0m Extracted 11 native libraries to /home/hermes-worker/.cache/open-sober/android-env/lib
+[2m2026-09-12T23:44:07.153939Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Main Roblox binary for JIT: /home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so
+[2m2026-09-12T23:44:07.951629Z[0m [32m INFO[0m [2mopen_sober::apk[0m[2m:[0m Extracted 594 assets to /home/hermes-worker/.cache/open-sober/android-env/assets
+[2m2026-09-12T23:44:07.952151Z[0m [32m INFO[0m [2mopen_sober[0m[2m:[0m Serving engine assets from /home/hermes-worker/.cache/open-sober/android-env/assets
+[2m2026-09-12T23:44:07.952180Z[0m [32m INFO[0m [2mopen_sober::jitlaunch[0m[2m:[0m Launching Roblox via the arm64jit JIT engine (/home/hermes-worker/runs/open-sober/crates/sober-core/../../target/debug/examples/elfjit)
+[2m2026-09-12T23:44:07.952195Z[0m [33m WARN[0m [2mopen_sober::jitlaunch[0m[2m:[0m JIT `play` drives the client's OWN render path (engine GLES bridge); the engine's self-driven main-loop producer is the remaining frontier — frames here are proven harness-driven on the live engine context.
+[2m2026-09-12T23:44:07.952222Z[0m [32m INFO[0m [2mopen_sober::jitlaunch[0m[2m:[0m JIT command: /home/hermes-worker/runs/open-sober/crates/sober-core/../../target/debug/examples/elfjit /home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so 0x2173ff4 --jni --startapp 0x258b144 --renderinit 0x105b3a280 --renderthunk --renderframe --renderframe-drive --renderframe-seedgles --renderframe-drawprobe --renderframe-triangle --renderframe-quad --renderframe-quad-loop 6 --persist-roundtrip --kicker 0x106863af8
+[2m2026-09-12T23:44:07.952476Z[0m [32m INFO[0m [2mopen_sober::jitlaunch[0m[2m:[0m Roblox (JIT) started (PID: 2748883)
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[fsmap] remap: /data/user/0/com.roblox.client/databases/session.db -> /home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[fsmap] remap: /data/user/0/com.roblox.client/databases/session.db -> /home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[persist] live datastore roundtrip: write=45B fsync=0 read_back_byte_exact=true on_disk=Some(true) host=/home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x560919f0ace0
+[plt] bound 534 JUMP_SLOT + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7f4deda13010 (4194304 buckets, shared zero sub @0x7f4defa13010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7f4deda13010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x56091d304d00 tls(tpidr)=0x56091d304e10
+JNI boot: x0 = JavaVM* 0x56091ceec7b0
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x56091ceec780 jobject=0x56091d43eb00 params=0x56091d8e69e0)
+[elfjit:kicker] host thread drives 0x106863af8 (pulse 1->2)
+[elfjit:appcmd] posting APP_CMD_0 (1)
+[elfjit:kicker] t=0 guest_global 0x106863af8=%0x1
+[elfjit:appcmd] posting APP_CMD_1 (2)
+[elfjit:appcmd] posting APP_CMD_2 (11)
+[elfjit:anativewindow] wired real X11 window XID=0x200000 on :253 as the guest ANativeWindow
+[elfjit:kicker] t=100 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=200 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=300 guest_global 0x106863af8=%0x2
+[elfjit:renderinit] driving THUNK 0x105b3a280 after 5000ms warm-up (ctx 0x1067d16f0=0x560919f0acd8, x0=0x200000, x1=0x0)
+[elfjit:renderinit] returned Ok(0x7f4dd0001d90)
+[elfjit:renderthunk] REAL ctx 0x7f4dd0001d90 vtable=0x106731ae0 egl: display=0x7f4dd008b5e0 surface=0x7f4dd000bde0 context=0x7f4dd00a8100
+[elfjit:renderthunk] ctx vtable[0..5] = 0x105b3b288 0x105b3b334 0x105b3b358 0x105b3b408 0x101dc7428 — [vt+16](idx2)=disp target
+[elfjit:renderframe] ctx=0x7f4dd0001d90 [+32]=display 0x7f4dd008b5e0 [+40]=surface 0x7f4dd000bde0 [+48]=context 0x7f4dd00a8100
+[elfjit:renderframe] swap returned Ok(0x1) (eglSwapBuffers)
+[elfjit:renderframe-drive] clear-color x5 obj 0x7f4dd1da0f70 (RGBA [0.4, 0.2, 0.95, 1.0] at [+0..16])
+[elfjit:renderframe-drive] gles-dispatch slot 0 guest 0x106d3b2f0 = 0x7f0000003018
+[elfjit:renderframe-drive] gles-dispatch slot 1 guest 0x106d3b2f8 = 0x7f0000003020
+[elfjit:renderframe-drive] gles-dispatch slot 2 guest 0x106d3b300 = 0x7f0000003028
+[elfjit:renderframe-drive] gles-dispatch slot 3 guest 0x106d3b308 = 0x7f0000018050
+[elfjit:renderframe-drive] gles-dispatch slot 4 guest 0x106d3b310 = 0x7f0000003030
+[elfjit:renderframe-drive] gles-dispatch slot 5 guest 0x106d3b318 = 0x7f0000003038
+[elfjit:renderframe-drive] gles-dispatch slot 6 guest 0x106d3b320 = 0x7f0000003040
+[elfjit:renderframe-drive] gles-dispatch slot 7 guest 0x106d3b328 = 0x7f0000003048
+[elfjit:renderframe-drive] gles-dispatch values = [139637976739864, 139637976739872, 139637976739880, 139637976825936, 139637976739888, 139637976739896, 139637976739904, 139637976739912]
+[elfjit:renderframe-seedgles] raw slot snapshot (before seed):
+[elfjit:renderframe-seedgles]   slot  0 = 0x00007f0000003018  
+[elfjit:renderframe-seedgles]   slot  1 = 0x00007f0000003020  
+[elfjit:renderframe-seedgles]   slot  2 = 0x00007f0000003028  
+[elfjit:renderframe-seedgles]   slot  3 = 0x00007f0000018050  
+[elfjit:renderframe-seedgles]   slot  4 = 0x00007f0000003030  
+[elfjit:renderframe-seedgles]   slot  5 = 0x00007f0000003038  
+[elfjit:renderframe-seedgles]   slot  6 = 0x00007f0000003040  
+[elfjit:renderframe-seedgles]   slot  7 = 0x00007f0000003048  
+[elfjit:renderframe-seedgles]   slot  8 = 0x00007f0000003050  
+[elfjit:renderframe-seedgles]   slot  9 = 0x00007f0000003058  
+[elfjit:renderframe-seedgles]   slot 10 = 0x00007f0000003060  
+[elfjit:renderframe-seedgles]   slot 11 = 0x00007f0000003098  
+[elfjit:renderframe-seedgles]   slot 12 = 0x00007f0000003090  
+[elfjit:renderframe-seedgles]   slot 13 = 0x00007f00000030a0  
+[elfjit:renderframe-seedgles]   slot 14 = 0x00007f00000030a8  
+[elfjit:renderframe-seedgles]   slot 15 = 0x00007f00000030b0  
+[elfjit:renderframe-seedgles] slot 0 (glDrawBuffers) <- bridge 0x7f0000003018
+[elfjit:renderframe-seedgles] slot 1 (glClearBufferiv) <- bridge 0x7f0000003020
+[elfjit:renderframe-seedgles] slot 2 (glClearBufferfv) <- bridge 0x7f0000003028
+[elfjit:renderframe-seedgles] slot 3 (glClearBufferfi) <- bridge 0x7f0000018058
+[elfjit:renderframe-seedgles] slot 4 (glColorMask) <- bridge 0x7f0000002978
+[elfjit:renderframe-seedgles] slot 5 (glDepthMask) <- bridge 0x7f0000002998
+[elfjit:renderframe-seedgles] slot 6 (glStencilMask) <- bridge 0x7f00000029b0
+[elfjit:renderframe-seedgles] slot 7 (glViewport) <- bridge 0x7f0000002918
+[elfjit:renderframe-seedgles] slot 9 (glDrawElements) <- bridge 0x7f0000002a38
+[elfjit:renderframe-seedgles] slot 10 (glDrawArrays) <- bridge 0x7f0000002a40
+[elfjit:renderframe-drive] fabricated renderer 0x7f4dd1da0a70 (+16=1,+24->0x7f4dd1da0b70[+552]=1,+40->0x7f4dd1da0c70[+140]=1) view 0x7f4dd1da0d70 ([+128]=1280 [+132]=720 [+140]=0)
+[elfjit:renderframe-drive] === frame iteration 0 color [0.4, 0.2, 0.95, 1.0] ===
+[elfjit:renderframe-drive] engine frame-fn 0x105b32c00 returned Ok(0x7f4dd1da0a70)
+[elfjit:renderframe-drive] post-frame swap returned Ok(0x1)
+[elfjit:renderframe-drawprobe] fabricated renderer 0x7f4dd1dc58d0 ([+56]->cont, [+120]=ibo, [+142]=3, empty prim list)
+[elfjit:renderframe-drawprobe] geometry wrapper 0x5b35288 returned Ok(0x0)
+[elfjit:renderframe-triangle] compiled vs=0x1 fs=0x2
+[elfjit:renderframe-triangle] linked program=0x3 current
+[elfjit:renderframe-triangle] compile_status vs=0x1 fs=0x1 link_status=0x1
+[elfjit:renderframe-triangle] vbo=0x1 ebo=0x2 uploaded
+[elfjit:renderframe-triangle] coherent renderer 0x7f4dd1e43f50: container 0x7f4dd1e44050 prim 0x7f4dd1e44350 desc 0x7f4dd1e44150 desc_tbl@renderer+0x48 stride 0x7f4dd1e44250 ibo 0x7f4dd1e44450
+[elfjit:renderframe-triangle] geometry wrapper 0x5b35288 returned Ok(0x0) (real indexed glDrawElements drawn)
+[elfjit:renderframe-triangle] readback: centroid(640,360)=RGBA(255,0,0,255) top-left-bg(60,20)=RGBA(255,0,0,255) top-right-bg(1200,20)=RGBA(255,0,0,255)
+[elfjit:renderframe-triangle] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-drawprobe] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-quad] program=0x6 compiled+linked; texture tex_id=0x1 uTex=0x0
+[elfjit:renderframe-quad] vbo=0x3 ebo=0x4 4 interleaved verts stride24 + 6 idx uploaded (1x1 grid)
+[elfjit:renderframe-quad] coherent renderer: 2-prim list (aPos+aUV) + 6-idx EBO fabricated
+[elfjit:renderframe-quad] geometry wrapper 0x5b35288 returned Ok(0x0) (textured QUAD drawn)
+[elfjit:renderframe-quad] readback: BL=RGBA(255,0,0,255) BR=RGBA(0,255,0,255) TR=RGBA(255,255,255,255) TL=RGBA(0,0,255,255)
+[elfjit:renderframe-quad] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-quad-loop] iter 0 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 1 drew+swap Ok(0x1) bg=[0.1, 0.9, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 2 drew+swap Ok(0x1) bg=[0.1, 0.1, 0.9, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 3 drew+swap Ok(0x1) bg=[0.9, 0.9, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 4 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.9, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 5 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.1, 1.0] (fresh textured-quad frame)
+exit=124

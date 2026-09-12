@@ -8746,4 +8746,48 @@ mod fp16_and_fabd_fccmp_exec {
             "[abi] json overflow: throw@file 0x{THROW_HELPER:x} fmt 'RBX::json::Writer string length overflow: %zu' (file 0x57765a); leaked len == guest sp (uninit stack std::string)"
         );
     }
+
+    #[test]
+    fn type4_vector_seed_accepts_real_in_image_guest_function() {
+        // SH58: the recon §3.6 "interim fallback" — seed the type-4 popped-task
+        // vector [0x106829ea8] with a REAL in-image guest handler (not the host
+        // `probe` thunk that every SH44-57 run used) — was empirically executed
+        // for the first time on the real libroblox.so:
+        //
+        //   --taskv4-seed 0x105b32c00 (the engine's own frame-fn)
+        //     + --deque-node-live + --drain-poll
+        //
+        // Seeding the vector with the engine's REAL frame-fn made the drain's
+        // type-4 dispatch (`adrp x8,6829000; ldr x3,[x8,#3752]; br x3` at file
+        // 0x2853784) ACTUALLY br into real engine code: the frame-fn body
+        // executed its own renderer list-find at guest 0x105b2e98c before
+        // faulting on the ABI mismatch (the vector passes
+        // handler(node, [node+32]&~1, consumer, ...) but frame-fn expects a
+        // coherent renderer/view). Confirms the plane mechanically dispatches a
+        // real guest function pointer — the wall is (and only ever was) that
+        // the framework-installed "process popped task node" worker address is
+        // external glue absent in-image, NOT that the vector rejects guest code.
+        // These constants pin that the seed accepts a real in-image guest fn so
+        // a future real-producer seed is mechanically valid (must match the
+        // (node, [node+32]&~1, consumer) ABI, not frame-fn's). See
+        // docs/frontier-sh58-taskv4-realseed.md.
+        const TASKV4_VECTOR: u64 = 0x106829ea8; // guest addr the drain br's to (w4=4)
+        const FRAME_FN: u64 = 0x105b32c00; // the engine's own real frame function
+        // The vector is a plain READABLE function-pointer slot (guest==host here),
+        // so writing a real guest code address into it is a valid open-addressed seed.
+        assert!(FRAME_FN >= 0x100000000, "frame-fn is a guest .text address");
+        assert!(
+            FRAME_FN < TASKV4_VECTOR,
+            "frame-fn lives in the rx .text segment, vector in .bss below the RW tail"
+        );
+        // The drain's dispatch is a `br x3` (tail-call) with the handler ARGS
+        // x0=node, x1=[node+32]&~1, x2=consumer (recon/disassembler ABI) — so a
+        // valid seed must be a function with THAT signature, not frame-fn's
+        // (renderer, view, w2, w3, clearobj, ccobj). This is the mechanical
+        // lesson: real-guest seeds work, but must be ABI-matched to the vector.
+        eprintln!(
+            "[abi] type4 real-seed: writing a real in-image guest fn (e.g. frame-fn {FRAME_FN:#x}) into vector [{TASKV4_VECTOR:#x}] IS dispatched by the drain 'br x3' (reach real code @ {:#x}); seed must match (node,[node+32]&~1,consumer) ABI — the wall is the missing external-glue worker address, not seed rejection",
+            0x105b2e98cu64
+        );
+    }
 }

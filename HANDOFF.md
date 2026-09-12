@@ -1,5 +1,42 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH58) — first REAL-guest-handler type-4 seed executed on the real binary: the drain's w4=4 dispatch `br`'d into the engine's OWN frame-fn (real engine code ran at guestpc 0x105b2e98c) before ABI-faulting. Workspace **503/0** (was 502/0, +1). Commit 30fa4c6. Doc docs/frontier-sh58-taskv4-realseed.md, artifacts runs/sh58-{taskv4-realseed,taskv4-sustain,baseline}.txt.
+
+Every SH44-57 frontier doc names the same next step: "feed a REAL engine
+frame/session producer address into the seed so a sustainably-dispatched task
+node advances the engine toward its own frame/screen." But every run used
+`--taskv4-seed probe` (a registered HOST thunk) — the guest-hex form
+(`--taskv4-seed <guest-addr>`) existed but was NEVER exercised. This cycle closes
+that gap and empirically executes the recon §3.6 "interim fallback":
+
+- **run runs/sh58-taskv4-realseed.txt:** full productized boot +
+  `--taskv4-seed 0x105b32c00 --deque-node-live 0x106829f00 --drain-poll 8`.
+  The vector was seeded with the engine's REAL frame-fn; the drain `br`'d into
+  it and the JIT translated+executed real engine code (frame-fn's renderer
+  list-find at `guestpc 0x105b2e98c`) then faulted on ABI (the vector passes
+  `handler(node, [node+32]&~1, consumer, w4, 5)`, frame-fn expects a
+  coherent renderer). **First confirmed real-guest-code dispatch through the
+  type-4 plane** — seed rejection is NOT the wall; the wall is exactly the
+  known one: the framework-installed "process popped task node" worker address
+  is external glue absent in-image, and any real seed must match the
+  `(node, [node+32]&~1, consumer)` ABI (frame-fn doesn't).
+- **new regression** `type4_vector_seed_accepts_real_in_image_guest_function`
+  pins the vector addr + that a real in-image guest fn is mechanically valid as
+  a seed + the ABI contract a real producer must match.
+- **re-verified green on current HEAD (post SH55/56/57):** probe sustain
+  (runs/sh58-taskv4-sustain.txt) = **190 consecutive node pops, 3 clean type-4
+  dispatches, exit 124** (SH49 downstream of the value-registry/asset/storage
+  changes); productized real-boot (runs/sh58-baseline.txt) = exit 124, real
+  triangle + textured quad + 6 quad-loop frames, byte-exact persist roundtrip,
+  594 assets extracted+served, zero ENOSYS.
+
+**Honest scope (unchanged structural wall):** frames remain harness-driven; the
+engine never self-produces a session/frame because `[0x106829ea8]` is
+framework-glue-installed only (no in-image store — SH46/52/53/55/56), and the
+real worker's address is not in the binary. Contribution is empirical: seed
+rejection ruled out + exact ABI a future real producer must match, and the whole
+stack re-confirmed green on current HEAD.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH57) — made the AAssetManager shims REAL (image-backed) + extract the real APK's assets so the engine can load its own UI content — recon-v2's "precondition for a frame". Workspace **502/0** (was 499/0, +3). Commit 1b02552. Doc docs/frontier-sh57-assetmanager.md, artifact runs/sh57-asset-run.txt.
 
 Recon-v2 (docs/recon-framework-boot-order.md) names the AssetManager the

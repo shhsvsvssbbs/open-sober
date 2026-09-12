@@ -1,0 +1,57 @@
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[persist] live datastore roundtrip: write=45B fsync=0 read_back_byte_exact=true on_disk=Some(true) host=/home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x55a2c9cb7ce0
+[plt] bound 534 JUMP_SLOT + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7f5205901010 (4194304 buckets, shared zero sub @0x7f5207901010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7f5205901010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x55a3024379e0 tls(tpidr)=0x55a302437af0
+JNI boot: x0 = JavaVM* 0x55a302023890
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x55a302023860 jobject=0x55a30257e500 params=0x55a302a21360)
+[elfjit:kicker] host thread drives 0x106863af8 (pulse 1->2)
+[elfjit:kicker] t=0 guest_global 0x106863af8=%0x1
+[elfjit:appcmd] posting APP_CMD_0 (1)
+[elfjit:appcmd] posting APP_CMD_1 (2)
+[elfjit:appcmd] posting APP_CMD_2 (11)
+[elfjit:anativewindow] wired real X11 window XID=0x200000 on :230 as the guest ANativeWindow
+[elfjit:taskv4] seeded dispatcher type-4 vector [0x106829ea8] = 0x105b32c00 — a popped task node reaching w4=4 will now call it
+[elfjit:drain-poll] base_load=0x0 base_addr=0x100000000 guest_of(0x102856f40)=0x202856f40; read now=aa1603e2
+[elfjit:deque-node-live] inject into LIVE drainer's deque (vtable 0x106829f00); draining when pc in [0x102856e40,0x1028570a4)
+[elfjit:drain-poll] patched 0x102856f40 -> mov x2,#8ms (0xd2800102)
+[elfjit:deque-node-live] waiting for live drainer pc in drain body (it=0)
+[elfjit:kicker] t=100 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=200 guest_global 0x106863af8=%0x2
+[elfjit:deque-node-live] recovered live drainer deque root x20=0x55a302437430
+[elfjit:deque-node-live] cloned head node 0x7f5205475780 as node base (headcell[0]=0x7f5205475780) -> guest node 0x107334000
+[elfjit:deque-node-live] ARMED force-pop 0x102856f4c (was 2a0003f8) -> 52800018
+[elfjit:deque-node-live] ARMED force-pop 0x102856f7c (was 3607fbb8) -> d503201f
+[elfjit:deque-node-live] dropped cached drain blocks [0x102856e40,0x1028570c0) — pop-loop will recompile patched
+[elfjit:deque-node-live] INJECTED node 0x107334000 packed=0x107334000 into headcell 0x7f51fdd3af80 (tag 0x0) — awaiting pop by live drainer
+
+[SIGSEGV] tid=2755760 fault=0x170 rip=0x7f51fdc9006d guestpc=0x105b2e98c rbx_matches_gueststate=true (reg_state=0x7fff90187f98, tid=0)
+  x0=0x0 x1=0x0 x2=0x7f5205475780 x3=0x105b32c00 x4=0x4
+  x5=0x0 x6=0xffffffff x7=0x0 x8=0x1 x9=0x106829f00 sp=0x55a302437270
+  x10=0x0 x19=0x107334000 x20=0x4 x21=0x5475780 x22=0x0
+  x23=0x0 x28=0xf4240 x29=0x55a302437270 lr(x30)=0x105b32c58 lsm_map_global=0x7f5205901010
+  HOST rax=0x55a302437270 rbx=0x7fff90187f98 rcx=0x55a302437270 rdx=0x170 rsi=0x7fff90187f98 rdi=0x7fff90187f98
+  HOST rbp=0x7fff90189cb0 rsp=0x7fff90183a38 r8=0x49932d3 r9=0x0 r10=0x1 r11=0x7f5207d1e080
+  HOST r12=0x1000 r13=0x7fff8f98d000 r14=0x7fff8f98c000 r15=0x0 eflags=0x10202
+  GUEST_THREADS (2755786:1,0x7f52051d8578) (2755787:2,0x7f5204cbe578) (2755760:0,0x7fff90187f98) in_jit_run=true
+  raw[]= 48 81 c0 00 00 00 00 48 89 83 e8 00 00 00 48 8b 13 48 8d 92 70 01 00 00 48 8b 02 48 89 43 40 48 8b 43 40 48 8b 4b 08 48 29 c8 50 51 52 9c 58 48
+
+  BT: -> 0x55a2c9a60c07

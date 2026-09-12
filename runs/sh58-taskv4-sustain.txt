@@ -1,0 +1,669 @@
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[persist] live datastore roundtrip: write=45B fsync=0 read_back_byte_exact=true on_disk=Some(true) host=/home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x5579cf032ce0
+[plt] bound 534 JUMP_SLOT + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7fbd8d111010 (4194304 buckets, shared zero sub @0x7fbd8f111010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7fbd8d111010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x557a02553c20 tls(tpidr)=0x557a02553d30
+JNI boot: x0 = JavaVM* 0x557a0213fae0
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x557a0213fab0 jobject=0x557a02689dc0 params=0x557a0269b5d0)
+[elfjit:appcmd] posting APP_CMD_0 (1)
+[elfjit:kicker] host thread drives 0x106863af8 (pulse 1->2)
+[elfjit:kicker] t=0 guest_global 0x106863af8=%0x1
+[elfjit:appcmd] posting APP_CMD_1 (2)
+[elfjit:appcmd] posting APP_CMD_2 (11)
+[elfjit:anativewindow] wired real X11 window XID=0x200000 on :262 as the guest ANativeWindow
+[elfjit:taskv4] seeded dispatcher type-4 vector [0x106829ea8] = 0x7f00000001c0 — a popped task node reaching w4=4 will now call it
+[elfjit:drain-poll] base_load=0x0 base_addr=0x100000000 guest_of(0x102856f40)=0x202856f40; read now=aa1603e2
+[elfjit:deque-node-live] inject into LIVE drainer's deque (vtable 0x106829f00); draining when pc in [0x102856e40,0x1028570a4)
+[elfjit:drain-poll] patched 0x102856f40 -> mov x2,#8ms (0xd2800102)
+[elfjit:deque-node-live] waiting for live drainer pc in drain body (it=0)
+[elfjit:kicker] t=100 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=200 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=300 guest_global 0x106863af8=%0x2
+[elfjit:deque-node-live] recovered live drainer deque root x20=0x557a02553670
+[elfjit:deque-node-live] cloned head node 0x7fbd8cba73c0 as node base (headcell[0]=0x7fbd8cba73c0) -> guest node 0x107334000
+[elfjit:deque-node-live] ARMED force-pop 0x102856f4c (was 2a0003f8) -> 52800018
+[elfjit:deque-node-live] ARMED force-pop 0x102856f7c (was 3607fbb8) -> d503201f
+[elfjit:deque-node-live] dropped cached drain blocks [0x102856e40,0x1028570c0) — pop-loop will recompile patched
+[elfjit:deque-node-live] INJECTED node 0x107334000 packed=0x107334000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:taskv4] type-4 task handler #1: fnarg0(x0)=0x107334000 arg1=0x0 arg2=0x7fbd8cba73c0 node=0x7f00000001c0 w4=4 x5=0
+[elfjit:deque-node-live] NODE 0x107334000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #1; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334100 packed=0x107334100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:taskv4] type-4 task handler #2: fnarg0(x0)=0x107334100 arg1=0x0 arg2=0x7fbd8cba73c0 node=0x7f00000001c0 w4=4 x5=0
+[elfjit:deque-node-live] NODE 0x107334100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #2; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334200 packed=0x107334200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:taskv4] type-4 task handler #3: fnarg0(x0)=0x107334200 arg1=0x0 arg2=0x7fbd8cba73c0 node=0x7f00000001c0 w4=4 x5=0
+[elfjit:deque-node-live] NODE 0x107334200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #3; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334300 packed=0x107334300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #4; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334400 packed=0x107334400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #5; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334500 packed=0x107334500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #6; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334600 packed=0x107334600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #7; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334700 packed=0x107334700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #8; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334800 packed=0x107334800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #9; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334900 packed=0x107334900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #10; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334a00 packed=0x107334a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #11; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334b00 packed=0x107334b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #12; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334c00 packed=0x107334c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #13; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334d00 packed=0x107334d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #14; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334e00 packed=0x107334e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #15; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107334f00 packed=0x107334f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107334f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #16; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335000 packed=0x107335000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #17; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335100 packed=0x107335100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #18; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335200 packed=0x107335200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #19; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335300 packed=0x107335300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #20; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335400 packed=0x107335400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #21; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335500 packed=0x107335500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #22; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335600 packed=0x107335600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #23; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335700 packed=0x107335700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #24; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335800 packed=0x107335800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #25; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335900 packed=0x107335900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #26; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335a00 packed=0x107335a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #27; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335b00 packed=0x107335b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #28; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335c00 packed=0x107335c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #29; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335d00 packed=0x107335d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #30; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335e00 packed=0x107335e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #31; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107335f00 packed=0x107335f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107335f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #32; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336000 packed=0x107336000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #33; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336100 packed=0x107336100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #34; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336200 packed=0x107336200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #35; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336300 packed=0x107336300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #36; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336400 packed=0x107336400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #37; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336500 packed=0x107336500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #38; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336600 packed=0x107336600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #39; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336700 packed=0x107336700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #40; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:renderinit] driving THUNK 0x105b3a280 after 5000ms warm-up (ctx 0x1067d16f0=0x5579cf032cd8, x0=0x200000, x1=0x0)
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336800 packed=0x107336800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #41; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336900 packed=0x107336900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #42; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336a00 packed=0x107336a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #43; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336b00 packed=0x107336b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:renderinit] returned Ok(0x7fbd74001d90)
+[elfjit:renderthunk] REAL ctx 0x7fbd74001d90 vtable=0x106731ae0 egl: display=0x7fbd7408b5e0 surface=0x7fbd740a8b40 context=0x7fbd740a7d10
+[elfjit:renderthunk] ctx vtable[0..5] = 0x105b3b288 0x105b3b334 0x105b3b358 0x105b3b408 0x101dc7428 — [vt+16](idx2)=disp target
+[elfjit:renderframe] ctx=0x7fbd74001d90 [+32]=display 0x7fbd7408b5e0 [+40]=surface 0x7fbd740a8b40 [+48]=context 0x7fbd740a7d10
+[elfjit:renderframe] swap returned Ok(0x1) (eglSwapBuffers)
+[elfjit:renderframe-drive] clear-color x5 obj 0x7fbd75da31c0 (RGBA [0.4, 0.2, 0.95, 1.0] at [+0..16])
+[elfjit:renderframe-drive] gles-dispatch slot 0 guest 0x106d3b2f0 = 0x7f0000003018
+[elfjit:renderframe-drive] gles-dispatch slot 1 guest 0x106d3b2f8 = 0x7f0000003020
+[elfjit:renderframe-drive] gles-dispatch slot 2 guest 0x106d3b300 = 0x7f0000003028
+[elfjit:renderframe-drive] gles-dispatch slot 3 guest 0x106d3b308 = 0x7f0000018050
+[elfjit:renderframe-drive] gles-dispatch slot 4 guest 0x106d3b310 = 0x7f0000003030
+[elfjit:renderframe-drive] gles-dispatch slot 5 guest 0x106d3b318 = 0x7f0000003038
+[elfjit:renderframe-drive] gles-dispatch slot 6 guest 0x106d3b320 = 0x7f0000003040
+[elfjit:renderframe-drive] gles-dispatch slot 7 guest 0x106d3b328 = 0x7f0000003048
+[elfjit:renderframe-drive] gles-dispatch values = [139637976739864, 139637976739872, 139637976739880, 139637976825936, 139637976739888, 139637976739896, 139637976739904, 139637976739912]
+[elfjit:renderframe-seedgles] raw slot snapshot (before seed):
+[elfjit:renderframe-seedgles]   slot  0 = 0x00007f0000003018  
+[elfjit:renderframe-seedgles]   slot  1 = 0x00007f0000003020  
+[elfjit:renderframe-seedgles]   slot  2 = 0x00007f0000003028  
+[elfjit:renderframe-seedgles]   slot  3 = 0x00007f0000018050  
+[elfjit:renderframe-seedgles]   slot  4 = 0x00007f0000003030  
+[elfjit:renderframe-seedgles]   slot  5 = 0x00007f0000003038  
+[elfjit:renderframe-seedgles]   slot  6 = 0x00007f0000003040  
+[elfjit:renderframe-seedgles]   slot  7 = 0x00007f0000003048  
+[elfjit:renderframe-seedgles]   slot  8 = 0x00007f0000003050  
+[elfjit:renderframe-seedgles]   slot  9 = 0x00007f0000003058  
+[elfjit:renderframe-seedgles]   slot 10 = 0x00007f0000003060  
+[elfjit:renderframe-seedgles]   slot 11 = 0x00007f0000003098  
+[elfjit:renderframe-seedgles]   slot 12 = 0x00007f0000003090  
+[elfjit:renderframe-seedgles]   slot 13 = 0x00007f00000030a0  
+[elfjit:renderframe-seedgles]   slot 14 = 0x00007f00000030a8  
+[elfjit:renderframe-seedgles]   slot 15 = 0x00007f00000030b0  
+[elfjit:renderframe-seedgles] slot 0 (glDrawBuffers) <- bridge 0x7f0000003018
+[elfjit:renderframe-seedgles] slot 1 (glClearBufferiv) <- bridge 0x7f0000003020
+[elfjit:renderframe-seedgles] slot 2 (glClearBufferfv) <- bridge 0x7f0000003028
+[elfjit:renderframe-seedgles] slot 3 (glClearBufferfi) <- bridge 0x7f0000018058
+[elfjit:renderframe-seedgles] slot 4 (glColorMask) <- bridge 0x7f0000002978
+[elfjit:renderframe-seedgles] slot 5 (glDepthMask) <- bridge 0x7f0000002998
+[elfjit:renderframe-seedgles] slot 6 (glStencilMask) <- bridge 0x7f00000029b0
+[elfjit:renderframe-seedgles] slot 7 (glViewport) <- bridge 0x7f0000002918
+[elfjit:renderframe-seedgles] slot 9 (glDrawElements) <- bridge 0x7f0000002a38
+[elfjit:renderframe-seedgles] slot 10 (glDrawArrays) <- bridge 0x7f0000002a40
+[elfjit:renderframe-drive] fabricated renderer 0x7fbd75da2cc0 (+16=1,+24->0x7fbd75da2dc0[+552]=1,+40->0x7fbd75da2ec0[+140]=1) view 0x7fbd75da2fc0 ([+128]=1280 [+132]=720 [+140]=0)
+[elfjit:renderframe-drive] === frame iteration 0 color [0.4, 0.2, 0.95, 1.0] ===
+[elfjit:renderframe-drive] engine frame-fn 0x105b32c00 returned Ok(0x7fbd75da2cc0)
+[elfjit:renderframe-drive] post-frame swap returned Ok(0x1)
+[elfjit:renderframe-drawprobe] fabricated renderer 0x7fbd75dc77e0 ([+56]->cont, [+120]=ibo, [+142]=3, empty prim list)
+[elfjit:deque-node-live] NODE 0x107336b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #44; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:renderframe-drawprobe] geometry wrapper 0x5b35288 returned Ok(0x0)
+[elfjit:renderframe-drawprobe] post-draw swap returned Ok(0x1)
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336c00 packed=0x107336c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #45; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336d00 packed=0x107336d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #46; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336e00 packed=0x107336e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #47; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107336f00 packed=0x107336f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107336f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #48; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337000 packed=0x107337000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #49; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337100 packed=0x107337100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #50; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337200 packed=0x107337200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #51; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337300 packed=0x107337300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #52; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337400 packed=0x107337400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #53; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337500 packed=0x107337500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #54; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337600 packed=0x107337600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #55; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337700 packed=0x107337700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #56; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337800 packed=0x107337800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #57; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337900 packed=0x107337900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #58; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337a00 packed=0x107337a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #59; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337b00 packed=0x107337b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #60; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337c00 packed=0x107337c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #61; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337d00 packed=0x107337d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #62; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337e00 packed=0x107337e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #63; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107337f00 packed=0x107337f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107337f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #64; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338000 packed=0x107338000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #65; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338100 packed=0x107338100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #66; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338200 packed=0x107338200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #67; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338300 packed=0x107338300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #68; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338400 packed=0x107338400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #69; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338500 packed=0x107338500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #70; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338600 packed=0x107338600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #71; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338700 packed=0x107338700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #72; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338800 packed=0x107338800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #73; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338900 packed=0x107338900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #74; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338a00 packed=0x107338a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #75; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338b00 packed=0x107338b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #76; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338c00 packed=0x107338c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #77; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338d00 packed=0x107338d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #78; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338e00 packed=0x107338e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #79; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107338f00 packed=0x107338f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107338f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #80; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339000 packed=0x107339000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #81; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339100 packed=0x107339100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #82; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339200 packed=0x107339200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #83; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339300 packed=0x107339300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #84; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339400 packed=0x107339400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #85; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339500 packed=0x107339500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #86; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339600 packed=0x107339600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #87; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339700 packed=0x107339700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #88; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339800 packed=0x107339800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #89; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339900 packed=0x107339900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #90; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339a00 packed=0x107339a00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339a00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #91; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339b00 packed=0x107339b00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339b00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #92; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339c00 packed=0x107339c00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339c00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #93; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339d00 packed=0x107339d00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339d00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #94; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339e00 packed=0x107339e00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339e00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #95; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x107339f00 packed=0x107339f00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x107339f00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #96; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a000 packed=0x10733a000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #97; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a100 packed=0x10733a100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #98; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a200 packed=0x10733a200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #99; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a300 packed=0x10733a300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #100; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a400 packed=0x10733a400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #101; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a500 packed=0x10733a500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #102; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a600 packed=0x10733a600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #103; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a700 packed=0x10733a700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #104; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a800 packed=0x10733a800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #105; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733a900 packed=0x10733a900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733a900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #106; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733aa00 packed=0x10733aa00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733aa00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #107; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ab00 packed=0x10733ab00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ab00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #108; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ac00 packed=0x10733ac00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ac00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #109; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ad00 packed=0x10733ad00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ad00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #110; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ae00 packed=0x10733ae00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ae00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #111; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733af00 packed=0x10733af00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733af00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #112; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b000 packed=0x10733b000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #113; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b100 packed=0x10733b100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #114; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b200 packed=0x10733b200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #115; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b300 packed=0x10733b300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #116; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b400 packed=0x10733b400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #117; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b500 packed=0x10733b500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #118; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b600 packed=0x10733b600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #119; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b700 packed=0x10733b700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #120; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b800 packed=0x10733b800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #121; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733b900 packed=0x10733b900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733b900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #122; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ba00 packed=0x10733ba00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ba00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #123; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733bb00 packed=0x10733bb00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733bb00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #124; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733bc00 packed=0x10733bc00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733bc00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #125; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733bd00 packed=0x10733bd00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733bd00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #126; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733be00 packed=0x10733be00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733be00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #127; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733bf00 packed=0x10733bf00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733bf00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #128; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c000 packed=0x10733c000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #129; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c100 packed=0x10733c100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #130; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c200 packed=0x10733c200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #131; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c300 packed=0x10733c300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #132; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c400 packed=0x10733c400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #133; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c500 packed=0x10733c500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #134; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c600 packed=0x10733c600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #135; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c700 packed=0x10733c700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #136; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c800 packed=0x10733c800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #137; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733c900 packed=0x10733c900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733c900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #138; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ca00 packed=0x10733ca00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ca00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #139; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733cb00 packed=0x10733cb00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733cb00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #140; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733cc00 packed=0x10733cc00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733cc00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #141; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733cd00 packed=0x10733cd00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733cd00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #142; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ce00 packed=0x10733ce00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ce00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #143; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733cf00 packed=0x10733cf00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733cf00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #144; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d000 packed=0x10733d000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #145; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d100 packed=0x10733d100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #146; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d200 packed=0x10733d200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #147; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d300 packed=0x10733d300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #148; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d400 packed=0x10733d400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #149; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d500 packed=0x10733d500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #150; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d600 packed=0x10733d600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #151; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d700 packed=0x10733d700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #152; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d800 packed=0x10733d800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #153; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733d900 packed=0x10733d900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733d900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #154; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733da00 packed=0x10733da00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733da00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #155; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733db00 packed=0x10733db00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733db00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #156; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733dc00 packed=0x10733dc00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733dc00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #157; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733dd00 packed=0x10733dd00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733dd00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #158; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733de00 packed=0x10733de00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733de00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #159; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733df00 packed=0x10733df00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733df00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #160; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e000 packed=0x10733e000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #161; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e100 packed=0x10733e100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #162; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e200 packed=0x10733e200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #163; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e300 packed=0x10733e300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #164; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e400 packed=0x10733e400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #165; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e500 packed=0x10733e500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #166; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e600 packed=0x10733e600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #167; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e700 packed=0x10733e700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #168; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e800 packed=0x10733e800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #169; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733e900 packed=0x10733e900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733e900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #170; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ea00 packed=0x10733ea00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ea00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #171; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733eb00 packed=0x10733eb00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733eb00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #172; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ec00 packed=0x10733ec00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ec00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #173; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ed00 packed=0x10733ed00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ed00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #174; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ee00 packed=0x10733ee00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ee00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #175; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733ef00 packed=0x10733ef00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733ef00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #176; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f000 packed=0x10733f000 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f000 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #177; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f100 packed=0x10733f100 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f100 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #178; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f200 packed=0x10733f200 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f200 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #179; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f300 packed=0x10733f300 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f300 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #180; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f400 packed=0x10733f400 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f400 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #181; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f500 packed=0x10733f500 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f500 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #182; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f600 packed=0x10733f600 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f600 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #183; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f700 packed=0x10733f700 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f700 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #184; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f800 packed=0x10733f800 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f800 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #185; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733f900 packed=0x10733f900 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733f900 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #186; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733fa00 packed=0x10733fa00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733fa00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #187; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733fb00 packed=0x10733fb00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733fb00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #188; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733fc00 packed=0x10733fc00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733fc00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #189; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733fd00 packed=0x10733fd00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] NODE 0x10733fd00 POPPED by live drainer (headcell now 0x1000000000000) — dispatch #190; re-injecting a fresh node to sustain the type-4 dispatch loop
+[elfjit:deque-node-live] no coherent head-node template, using zeroed node (may crash on re-enqueue)
+[elfjit:deque-node-live] INJECTED node 0x10733fe00 packed=0x10733fe00 into headcell 0x7fbd8554af80 (tag 0x0) — awaiting pop by live drainer
+[elfjit:deque-node-live] gave up after 400 ticks
