@@ -1,5 +1,37 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH49) — the type-4 task-dispatch plane is now SUSTAINABLE: the `--deque-node-live` injector stops re-evicting the drain's translated block, so inject+pop+dispatch runs 197 consecutive pops with zero crash (SH44 faulted at pop #39). Workspace 495/0 (unchanged). Doc docs/frontier-sh49-taskv4-sustain.md, artifact runs/sh49-taskv4-sustain.txt.
+
+SH44 proved the type-4 popped-task dispatch plane (`[0x6829ea8]`) is functional
+when seeded, but every sustained attempt faulted after ~39 injected nodes
+(SIGSEGV at guest 0x102856f7c). Root cause (runs/sh44-taskv4-plane.txt): the
+injector re-patched force-pop **and re-dropped the cached drain blocks
+(`block_cache_drop_region(0x102856e40, 0x1028570c0)`) on EVERY re-injection**,
+recompiling the pop-loop while the drain was mid-execution of it — after ~39
+churns the translation desynced and the popped-node register loaded an
+instruction word (`x22=0x7bfdd503233f`, low-32 `0xd503233f` = a NOP). The
+patches are idempotent and the guest bytes stay patched, so the per-iteration
+reset was pure churn.
+
+Fix (elfjit `--deque-node-live`): a static `ARMED: AtomicBool` runs the
+force-pop patch + cache eviction **exactly once** (first real placement);
+subsequent re-injections only swap the node into the head-cell. Verified on the
+full productized recipe + `--taskv4-seed probe --deque-node-live 0x106829f00
+--drain-poll 8`: **197 consecutive `NODE ... POPPED`** (SH44 crashed at #39), 3
+clean type-4 vector dispatches through the real dispatcher w4=4 plane, armed +
+evicted exactly once each, zero SIGSEGV/abort/`string length overflow`, exit
+124 (stable idle). Productized `open-sober play --apk --jit` re-verified green
+(runs/sh49-product-reverify.txt): exit 124, real triangle + textured quad
+BL=RED/BR=GREEN/TR=WHITE/TL=BLUE + quad-loop, swaps Ok(0x1), zero ENOSYS.
+
+**Honest scope:** this removes the harness's self-destructive reinjection so a
+real producer can be seeded sustainably; it does NOT yet drive a self-produced
+frame. The vector is still harness-seeded (probe) here — SH46 proved no in-code
+install site. **Next (closest unblocked):** feed `--taskv4-seed 0x<guest>`
+(+ `--deque-node-live`) a real engine frame/session handler so a sustainably
+dispatched task node advances the engine toward its own frame — the loop it
+runs in no longer self-destructs. Standing structural wall otherwise unchanged.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH48) — the engine's instanced-mesh pipeline is no longer NULL-bound: `glVertexAttribDivisor` joins the GLES int bridge, and the SH37 instanced gate is extended from a no-op count=0 draw probe to a real non-empty instanced draw (count=1, 4 instances) with a bound VBO + divisor 1 against real Mesa. Workspace 495/0 (was 494/0, +1). Doc docs/frontier-sh48-instanced-divisor.md.
 
 A real instanced mesh must call `glVertexAttribDivisor(index, n>0)` to mark the

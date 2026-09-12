@@ -1207,10 +1207,22 @@ fn main() {
                 .and_then(|i| std::env::args().nth(i + 1))
                 .map(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).expect("--deque-arg2 needs hex"));
             std::thread::spawn(move || {
-                use std::sync::atomic::{AtomicU64, Ordering};
+                use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
                 static ROOT: AtomicU64 = AtomicU64::new(0);
                 static PLACED: AtomicU64 = AtomicU64::new(0);
                 static HEADCELL: AtomicU64 = AtomicU64::new(0);
+                // SH44/SH11: the force-pop patches + block-cache eviction must run
+                // EXACTLY ONCE. The patches are idempotent and the eviction only
+                // needs to force the drain body to recompile from the now-patched
+                // guest bytes the first time; a cache drop on EVERY re-injection
+                // recompiles the pop-loop while the drain is mid-execution, and
+                // after ~40 re-injections the translated block desyncs (the crash
+                // at 0x102856f7c in runs/sh44-taskv4-plane.txt). Subsequent
+                // injections only SWAP the node into the head-cell (no code patch,
+                // no eviction), so a sustainable type-4 dispatch loop is possible
+                // — the prerequisite for seeding the vector with a real guest
+                // producer and observing sustained forwarding.
+                static ARMED: AtomicBool = AtomicBool::new(false);
                 eprintln!(
                     "[elfjit:deque-node-live] inject into LIVE drainer's deque (vtable 0x{vt:x}); draining when pc in [0x{DRAIN_LO:x},0x{DRAIN_HI:x})"
                 );
@@ -1414,39 +1426,41 @@ fn main() {
                         (headcell as *mut u64).write_volatile(packed);
                         HEADCELL.store(headcell, Ordering::Relaxed);
                         PLACED.store(packed, Ordering::Relaxed);
-                        // ARM FORCE-POP (deferred from startup when --deque-node-live
-                        // is set): now that OUR node is placed at head, patch the
-                        // drain's pop-loop to always fall through — `mov w24,w0`
-                        // (0x102856f4c) -> mov w24,#1 and NOP the tbz (0x102856f7c) —
-                        // so the next drain iteration pops+dispatches OUR foreign
-                        // node (passes the self-skip guard, [node+40]=1 -> probe),
-                        // NOT the sentinel. This is the SH11 sequencing lever: stable
-                        // drain while placing, force-pop only after placement.
-                        let arm = [0x102856f4cu64, 0x102856f7cu64];
-                        for a in arm {
-                            let p = a & !0xfff;
-                            unsafe {
-                                libc::mprotect(p as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_WRITE);
+                        // ARM FORCE-POP exactly ONCE (SH44/SH11): patch the drain's
+                        // pop-loop to always fall through (`mov w24,w0` 0x102856f4c ->
+                        // mov w24,#1 and NOP the tbz 0x102856f7c) so the next drain
+                        // iteration pops+dispatches OUR foreign node, then drop the
+                        // already-compiled drain block so it recompiles from the
+                        // patched bytes. Doing this on EVERY re-injection re-evicts
+                        // the block while the drain runs it and eventually
+                        // desyncs the translation (SH44 crash at 0x102856f7c).
+                        if !ARMED.swap(true, Ordering::Relaxed) {
+                            let arm = [0x102856f4cu64, 0x102856f7cu64];
+                            for a in arm {
+                                let p = a & !0xfff;
+                                unsafe {
+                                    libc::mprotect(p as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_WRITE);
+                                }
+                                let before = unsafe { *(a as *const u32) };
+                                let word = if a == 0x102856f7c { 0xd503_201fu32 /* NOP */ } else { 0x5280_0018u32 /* mov w24,#1 */ };
+                                unsafe { *(a as *mut u32) = word };
+                                unsafe {
+                                    libc::mprotect(p as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_EXEC);
+                                }
+                                eprintln!(
+                                    "[elfjit:deque-node-live] ARMED force-pop {:#x} (was {before:08x}) -> {word:08x}",
+                                    a
+                                );
                             }
-                            let before = unsafe { *(a as *const u32) };
-                            let word = if a == 0x102856f7c { 0xd503_201fu32 /* NOP */ } else { 0x5280_0018u32 /* mov w24,#1 */ };
-                            unsafe { *(a as *mut u32) = word };
-                            unsafe {
-                                libc::mprotect(p as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_EXEC);
-                            }
+                            // The drain body was already compiled (unpatched) into the
+                            // block cache; drop those entries so the dispatcher
+                            // recompiles it from the now-patched guest bytes on the
+                            // next re-entry (otherwise the force-pop has no effect).
+                            arm64jit::jit::block_cache_drop_region(0x102856e40, 0x1028570c0);
                             eprintln!(
-                                "[elfjit:deque-node-live] ARMED force-pop {:#x} (was {before:08x}) -> {word:08x}",
-                                a
+                                "[elfjit:deque-node-live] dropped cached drain blocks [0x102856e40,0x1028570c0) — pop-loop will recompile patched"
                             );
                         }
-                        // The drain body was already compiled (unpatched) into the
-                        // block cache; drop those entries so the dispatcher
-                        // recompiles it from the now-patched guest bytes on the
-                        // next re-entry (otherwise the force-pop has no effect).
-                        arm64jit::jit::block_cache_drop_region(0x102856e40, 0x1028570c0);
-                        eprintln!(
-                            "[elfjit:deque-node-live] dropped cached drain blocks [0x102856e40,0x1028570c0) — pop-loop will recompile patched"
-                        );
                         eprintln!(
                             "[elfjit:deque-node-live] INJECTED node 0x{np:x} packed=0x{packed:x} into headcell 0x{headcell:x} (tag {tag:#x}) — awaiting pop by live drainer"
                         );
