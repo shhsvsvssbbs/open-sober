@@ -632,8 +632,23 @@ fn auto_value_string_getter(name: &[u8]) -> Option<&'static [u8]> {
         b"getCountry" => Some(b"US"),
         b"getNetworkType" => Some(b"WIFI"),
         b"getAppVersion" => Some(b""),
+        // PlatformParams.assetFolderPath → the host assets root (SH57 assets
+        // extraction). A real path here lets the engine's content loader find
+        // its actual UI/texture/font files by direct FS open, not just via the
+        // AAssetManager.
+        b"getAssetFolderPath" => assets_root_cstr(),
         _ => None,
     }
+}
+
+/// Return the host SOBER_ASSETS_ROOT as a static, process-lifetime byte string
+/// (or empty if unmounted). Must outlive the guest, so it is leaked once.
+fn assets_root_cstr() -> Option<&'static [u8]> {
+    let root = std::env::var_os("SOBER_ASSETS_ROOT")?;
+    let s = root.to_str()?;
+    // NUL-terminated, stable for the whole run.
+    let c = Box::leak(s.to_owned().into_boxed_str());
+    Some(unsafe { std::mem::transmute::<&[u8], &'static [u8]>(c.as_bytes()) })
 }
 
 /// CallObjectMethod(env, obj, methodID, ...): return a real jstring handle for
@@ -1622,6 +1637,21 @@ mod tests {
             assert_eq!(g_im(env, 0x4321, mid2, 0, 0, 0, 0, 0), 0, "getMembershipType default 0");
             let (g_lm, _) = host_call_at(get(CALL_LONG_METHOD)).expect("CallLongMethod thunk");
             assert_eq!(g_lm(env, 0x4321, get_name_id(b"getAppUserId"), 0, 0, 0, 0, 0), 0, "getAppUserId default 0");
+            // PlatformParams.assetFolderPath points at the host assets root when
+            // one is mounted (SH57 extraction) so the engine's content loader
+            // finds real files; empty when unmounted (boot-safe).
+            let (g_om_afp, _) = host_call_at(get(CALL_OBJECT_METHOD)).expect("CallObjectMethod thunk");
+            let save_assets = std::env::var_os("SOBER_ASSETS_ROOT");
+            unsafe { std::env::set_var("SOBER_ASSETS_ROOT", "/tmp/fake-assets-root") };
+            let h_afp = g_om_afp(env, 0x4321, get_name_id(b"getAssetFolderPath"), 0, 0, 0, 0, 0);
+            assert_ne!(h_afp, 0, "assetFolderPath returns a readable jstring when mounted");
+            let (g_sl_afp, _) = host_call_at(get(GET_STRING_UTF_LEN)).expect("GetStringUTFLength thunk");
+            let len_afp = g_sl_afp(env, h_afp, 0, 0, 0, 0, 0, 0);
+            assert!(len_afp > 0, "assetFolderPath length reflects the real assets root (got {len_afp})");
+            unsafe { std::env::remove_var("SOBER_ASSETS_ROOT") };
+            let h_afp0 = g_om_afp(env, 0x4321, get_name_id(b"getAssetFolderPath"), 0, 0, 0, 0, 0);
+            assert_eq!(h_afp0, 0, "assetFolderPath empty/unmounted -> NULL/0 (boot-safe)");
+            if let Some(prev) = save_assets { unsafe { std::env::set_var("SOBER_ASSETS_ROOT", prev) }; }
             // getAllocatableBytes (LocalStorageManager) reports REAL host free
             // space — recon-v2: 0 means the engine believes there's no disk and
             // RbxStorage never builds its content cache (objective 2b). Must be
