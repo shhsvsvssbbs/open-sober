@@ -43,6 +43,13 @@ RbxStorage never builds its content cache (undermines objective 2b's remembered
 session cache plane). Extends the AutoValue getter regression. Workspace 502/0.
 Commit 401683c.
 
+## SH57c (Sep 12, 2026, hermes-worker): PlatformParams.getAssetFolderPath yields
+the host assets root (SOBER_ASSETS_ROOT from SH57 extraction) so the engine's
+content loader can find real UI/texture/font files by direct FS open, not just via
+AAssetManager; unmounted -> NULL/0 (boot-safe). Extends the AutoValue getter
+regression; productized real-boot re-verified exit 124. Workspace 502/0.
+Commit b73f0eb.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH56) — empirically CLOSED recon Task-2 on the real binary: the AutoValue getter-value registry (SH55) does NOT fix the StartApp json-abort — the leaked string length is params-independent (a host-mmap pointer read at the append bound-check, never touching the getter registry). Workspace **499/0** (unchanged). Doc docs/frontier-sh56-json-abort-params-independent.md, artifacts runs/sh56-{startapp-json-abort,startapp-jobject-abort,jsondump}.txt.
 
 The recon (docs/recon-framework-boot-order.md, Task-2) claims the `RBX::json::Writer
