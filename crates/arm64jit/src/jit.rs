@@ -966,6 +966,31 @@ pub extern "C" fn guest_svc(st: *mut CpuState) -> u64 {
         68 => unsafe { // pwrite64(68)
             libc::syscall(libc::SYS_pwrite64, a[0] as usize, a[1] as usize, a[2] as usize, a[3] as i64) as c_long
         },
+        // preadv(69) / pwritev(70): vectored positional I/O — a real SQLite
+        // session datastore flushes log/db pages with pwritev (batched page
+        // write) and reads them back with preadv. Previously unhandled
+        // (-ENOSYS), so a store doing vectored paged I/O failed. `struct iovec`
+        // is byte-identical across aarch64/x86-64, so a raw forward writes the
+        // guest's iovec array in place. Signature: preadv(fd, iov, iovcnt,
+        // pos_low, pos_high) — aarch64 aarch64 uses a 2-word offset (loff_t)
+        // as the last two syscall args; SYS_preadv takes (pos, pos_hi).
+        69 => unsafe {
+            libc::syscall(
+                libc::SYS_preadv, a[0] as usize, a[1] as usize, a[2] as usize,
+                a[3] as usize, a[4] as usize,
+            ) as c_long
+        },
+        70 => unsafe {
+            libc::syscall(
+                libc::SYS_pwritev, a[0] as usize, a[1] as usize, a[2] as usize,
+                a[3] as usize, a[4] as usize,
+            ) as c_long
+        },
+        // sync(81): flush all modified inode data to disk. The SQLite
+        // datastore issues it (PRAGMA synchronous=FULL path) before reporting a
+        // transaction durable, so an unhandled sync would -ENOSYS and the store
+        // would think its commit failed. Trivial host flush, no struct layouts.
+        81 => unsafe { libc::sync(); 0 as c_long },
         // --- system metadata (fixed char-array layout, arch-independent) ---
         160 => { // uname
             unsafe {

@@ -498,3 +498,85 @@ fn fsmap_faccessat_uses_true_pathname_and_remaps_into_store() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn fsmap_preadv_pwritev_sync_support_sqlite_durability_path() {
+    // A real SQLite-backed session datastore flushes db/shm pages with
+    // pwritev (batched vectored positional write) and reads them back with
+    // preadv; it issues sync(81) under PRAGMA synchronous=FULL before
+    // reporting a transaction durable. All three were previously unhandled
+    // (-ENOSYS), so a store doing vectored paged I/O would fail. Each must now
+    // reach the persistent store through the real guest_svc ABI.
+    let _g = lock_fsmap();
+    let root = std::env::temp_dir().join(format!(
+        "opensober-fsmap-vec-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    fsmap::set_root_for_tests(root.clone());
+
+    const FILE: &str = "/data/user/0/com.roblox.client/databases/session.db";
+    const P0: &[u8] = b"page0-R0BL0X";
+    const P1: &[u8] = b"page1-S3SS10N";
+
+    let path = cstr(FILE);
+    let fd = svc(
+        [
+            libc::AT_FDCWD as u64,
+            path.as_ptr() as u64,
+            (libc::O_CREAT | libc::O_RDWR) as u64,
+            0o600,
+            0,
+            0,
+        ],
+        56,
+    );
+    assert!(fd >= 0, "openat failed: {fd}");
+    let fd = fd as i32;
+
+    // pwritev(70): write two pages at distinct offsets via a guest iovec array.
+    // aarch64 pwritev(fd, iov, iovcnt, pos_low, pos_high) — iovec is
+    // {base(8), len(8)}, byte-identical across arches.
+    let mut iov: [libc::iovec; 2] = unsafe { std::mem::zeroed() };
+    let (b0, b1) = (cstr(std::str::from_utf8(P0).unwrap()), cstr(std::str::from_utf8(P1).unwrap()));
+    iov[0] = libc::iovec { iov_base: b0.as_ptr() as *mut libc::c_void, iov_len: P0.len() };
+    iov[1] = libc::iovec { iov_base: b1.as_ptr() as *mut libc::c_void, iov_len: P1.len() };
+    let pv = svc(
+        [fd as u64, iov.as_ptr() as u64, 2, 0, 0, 0],
+        70,
+    );
+    assert_eq!(pv, (P0.len() + P1.len()) as i64, "pwritev wrote the wrong byte count: {pv}");
+
+    // sync(81): flush to disk. Must return 0 (not -ENOSYS) — a transaction
+    // durabilty barrier the SQLite layer relies on.
+    let sy = svc([0, 0, 0, 0, 0, 0], 81);
+    assert_eq!(sy, 0, "sync(81) should succeed, got {sy}");
+
+    // Close + reopen so we read a fresh O_CREAT'l'd file (no in-process cache).
+    assert_eq!(svc([fd as u64, 0, 0, 0, 0, 0], 57), 0);
+    let fd2 = svc(
+        [
+            libc::AT_FDCWD as u64,
+            path.as_ptr() as u64,
+            libc::O_RDWR as u64,
+            0, 0, 0,
+        ],
+        56,
+    );
+    assert!(fd2 >= 0, "reopen failed: {fd2}");
+    let fd2 = fd2 as i32;
+
+    // preadv(69): read page1 back at its offset (16) into a two-iovec array.
+    let mut out = [0u8; P1.len()];
+    let mut iovr: [libc::iovec; 1] = unsafe { std::mem::zeroed() };
+    iovr[0] = libc::iovec { iov_base: out.as_mut_ptr() as *mut libc::c_void, iov_len: P1.len() };
+    let pr = svc(
+        [fd2 as u64, iovr.as_ptr() as u64, 1, P0.len() as u64, 0, 0],
+        69,
+    );
+    assert_eq!(pr, P1.len() as i64, "preadv read the wrong byte count: {pr}");
+    assert_eq!(&out, P1, "preadv content mismatch (vectored read from store)");
+    assert_eq!(svc([fd2 as u64, 0, 0, 0, 0, 0], 57), 0);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
