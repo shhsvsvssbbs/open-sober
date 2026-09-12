@@ -1,5 +1,41 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH57) — made the AAssetManager shims REAL (image-backed) + extract the real APK's assets so the engine can load its own UI content — recon-v2's "precondition for a frame". Workspace **502/0** (was 499/0, +3). Commit 1b02552. Doc docs/frontier-sh57-assetmanager.md, artifact runs/sh57-asset-run.txt.
+
+Recon-v2 (docs/recon-framework-boot-order.md) names the AssetManager the
+"precondition for a frame": the engine reads its UI content (594 assets/ entries —
+FoundationImages sprite sheets, BuilderIcons fonts, GLSL shader packs) out of the
+source APK via AAssetManager_fromJava/open/getLength/getBuffer. All four shims
+returned NULL/0 (both the Rust JIT shims and the C jni_stubs.h path), so the engine
+could not load a SINGLE real asset even if a self-driven frame were produced. This
+cycle makes them image-backed:
+
+- aassetmanager_fromJava → stable non-NULL manager sentinel.
+- AAssetManager_open(mgr, filename, mode) reads the guest C-string filename
+  (normalizes a "assets/" prefix), serves it from the host SOBER_ASSETS_ROOT (the
+  extracted APK assets/ dir) into a stable owned buffer in an open-asset table.
+- AAsset_getLength/getBuffer → real length / stable host pointer the guest derefs
+  directly (guest vaddr == host addr in this JIT; the Box buffer is never moved).
+- AAsset_close drops the handle; missing/unmounted still fail NULL/0 so unarmed
+  boots are untouched.
+- New apk::extract_assets() decompresses the APK's assets/ into out_dir/assets
+  (Roblox stores 203/594 DEFLATE), handles the flat-APK + assets/app.zip→
+  config.arm64_v8a.apk bundle forms, skips non-assets/dir entries, returns None for
+  a no-assets APK.
+- main.rs --jit exports SOBER_ASSETS_ROOT before launch_jit (the spawned elfjit
+  inherits it).
+
+**Honest scope:** the standing structural wall is UNCHANGED — the engine still
+never self-produces a session/frame (type-4 producer vector [0x106829ea8] is
+framework-glue-seeded only, recon-Task-1/2 closed in SH53/SH56), so in the
+productized run it does not yet issue AAssetManager calls. The asset plane is
+served, proven hermetic, and configured for the run — the recon's named
+precondition block is removed; it is only *reached* by a future self-driven
+session. The only proven live dispatch plane remains `--taskv4-seed` +
+`--deque-node-live`; next frontier: feed a REAL engine frame/session producer
+address into the seed so a sustainably-dispatched task node advances the engine
+toward its own frame/screen (which now has the assets to load).
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH56) — empirically CLOSED recon Task-2 on the real binary: the AutoValue getter-value registry (SH55) does NOT fix the StartApp json-abort — the leaked string length is params-independent (a host-mmap pointer read at the append bound-check, never touching the getter registry). Workspace **499/0** (unchanged). Doc docs/frontier-sh56-json-abort-params-independent.md, artifacts runs/sh56-{startapp-json-abort,startapp-jobject-abort,jsondump}.txt.
 
 The recon (docs/recon-framework-boot-order.md, Task-2) claims the `RBX::json::Writer
