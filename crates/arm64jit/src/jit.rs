@@ -310,6 +310,14 @@ pub type HostFloat32Call = extern "C" fn(f0: f32, f1: f32, f2: f32, f3: f32, f4:
 /// neither can express GLES. Each registered bridge reads the exact guest
 /// x/s-lanes its signature needs and calls the real Mesa symbol via gles-wrapper.
 pub type HostGlesCall = extern "C" fn(st: *mut CpuState) -> u64;
+/// JNI float-return bridge: `jfloat CallFloatMethod(JNIEnv*, jobject, jmethodID, ...)`
+/// passes its args in the INTEGER registers (x0..x2) but returns the `jfloat` in
+/// the FP register s0 (AAPCS64). The float32 bridge (`HostFloat32Call`) only
+/// marshals FP-register args, so it cannot service a JNI call whose args are
+/// integer registers (x0..x2). This bridge gets the whole `CpuState` and reads
+/// the x-register args itself; its `u32` return is written back into the low
+/// lane of s0 by the dispatcher.
+pub type HostJniF32 = extern "C" fn(st: *mut CpuState) -> u32;
 
 /// Reverse-name registry for host-call slots. The resolver keeps a
 /// `name -> slot-addr` map for imports it allocates; but GLES mixed-ABI
@@ -346,6 +354,7 @@ static HOST_CALLS: Mutex<[Option<HostCall>; HOST_THUNK_MAX]> = Mutex::new([None;
 static HOST_FLOAT_CALLS: Mutex<[Option<HostFloatCall>; HOST_THUNK_MAX]> = Mutex::new([None; HOST_THUNK_MAX]);
 static HOST_FLOAT32_CALLS: Mutex<[Option<HostFloat32Call>; HOST_THUNK_MAX]> = Mutex::new([None; HOST_THUNK_MAX]);
 static HOST_GLES_CALLS: Mutex<[Option<HostGlesCall>; HOST_THUNK_MAX]> = Mutex::new([None; HOST_THUNK_MAX]);
+static HOST_JNI_F32_CALLS: Mutex<[Option<HostJniF32>; HOST_THUNK_MAX]> = Mutex::new([None; HOST_THUNK_MAX]);
 
 /// Execution context of the active `jit_run` call: the raw guest image bytes
 /// (as loaded/mapped — lives for the whole run, process-lifetime for elfjit)
@@ -608,6 +617,42 @@ fn host_gles_call_at(pc: u64) -> Option<(HostGlesCall, usize)> {
 /// HostGlesCall fn pointer for a `pc` in the GLES region, or 0.
 pub fn gles_bridge_fn(pc: u64) -> u64 {
     host_gles_call_at(pc).map(|(f, _)| f as usize as u64).unwrap_or(0)
+}
+
+/// Guest base address of the **JNI float-return** bridge region (after the GLES
+/// slots). A guest `blr` through env->functions[CallFloatMethod] lands here.
+#[inline(always)]
+pub fn host_jni_f32_base() -> u64 {
+    host_gles_base() + (HOST_THUNK_MAX as u64) * 8
+}
+
+/// Register a JNI float-return bridge at an auto-allocated slot; returns its
+/// guest address. The bridge is `fn(*mut CpuState) -> u32`; the dispatcher
+/// writes the `u32` into the low lane of guest s0 (v0) so a caller which reads
+/// the jfloat return register gets it.
+pub fn register_jni_f32_call(f: HostJniF32) -> u64 {
+    let mut hc = HOST_JNI_F32_CALLS.lock().unwrap();
+    let i = hc
+        .iter()
+        .position(|s| s.is_none())
+        .expect("jni-f32 thunk table full");
+    hc[i] = Some(f);
+    host_jni_f32_base() + (i as u64) * 8
+}
+
+/// Look up a JNI float-return bridge for a guest `pc` in the jni-f32 region.
+fn host_jni_f32_call_at(pc: u64) -> Option<(HostJniF32, usize)> {
+    let base = host_jni_f32_base();
+    if pc < base {
+        return None;
+    }
+    let off = pc - base;
+    if off % 8 != 0 {
+        return None;
+    }
+    let i = (off / 8) as usize;
+    let hc = HOST_JNI_F32_CALLS.lock().unwrap();
+    hc.get(i).copied().flatten().map(|f| (f, i))
 }
 
 /// Supervisor-call dispatcher. AArch64 uses x8 as the syscall number and x0-x5
@@ -2119,6 +2164,18 @@ pub fn jit_run_inner(image: &[u8], base: u64, state: *mut CpuState) -> Result<u6
             let ret = hostg(state);
             let s = unsafe { &mut *state };
             s.x[0] = ret;
+            s.pc = s.x[30];
+            continue;
+        }
+        // JNI float-return bridge: `jfloat CallFloatMethod(env, obj, mid, ...)`
+        // has its args in the x-registers but returns the jfloat in s0. The
+        // bridge reads the integer args from the full CpuState and its u32
+        // return is placed into the low lane of guest s0 (v0), so the caller
+        // which reads the FP return register sees the real value.
+        if let Some((hostj, _slot)) = host_jni_f32_call_at(pc) {
+            let ret = hostj(state);
+            let s = unsafe { &mut *state };
+            s.v[0] = (s.v[0] & !0xffff_ffff) | (ret as u64 & 0xffff_ffff);
             s.pc = s.x[30];
             continue;
         }

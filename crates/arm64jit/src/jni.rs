@@ -22,7 +22,7 @@
 //! end-to-end-validated slots were GetVersion/FindClass/GetStaticMethodID,
 //! which coincidentally match the official offsets.)
 
-use crate::jit::{register_host_call_auto, HostCall};
+use crate::jit::{register_host_call_auto, HostCall, HostJniF32};
 use std::alloc::{alloc_zeroed, Layout};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -90,6 +90,8 @@ const IS_INSTANCE_OF: usize = 32;
 const CALL_OBJECT_METHOD: usize = 34;
 const CALL_BOOLEAN_METHOD: usize = 37;
 const CALL_INT_METHOD: usize = 49;
+const CALL_LONG_METHOD: usize = 52;
+const CALL_FLOAT_METHOD: usize = 55;
 const CALL_VOID_METHOD: usize = 61;
 const CALL_STATIC_OBJECT_METHOD: usize = 114;
 const CALL_STATIC_BOOLEAN_METHOD: usize = 117;
@@ -174,6 +176,8 @@ const JNI_METHOD_NAMES: &[(&str, &usize)] = &[
     ("JNIEnv.CallObjectMethod", &CALL_OBJECT_METHOD),
     ("JNIEnv.CallBooleanMethod", &CALL_BOOLEAN_METHOD),
     ("JNIEnv.CallIntMethod", &CALL_INT_METHOD),
+    ("JNIEnv.CallLongMethod", &CALL_LONG_METHOD),
+    ("JNIEnv.CallFloatMethod", &CALL_FLOAT_METHOD),
     ("JNIEnv.CallVoidMethod", &CALL_VOID_METHOD),
     ("JNIEnv.CallStaticObjectMethod", &CALL_STATIC_OBJECT_METHOD),
     ("JNIEnv.CallStaticBooleanMethod", &CALL_STATIC_BOOLEAN_METHOD),
@@ -618,6 +622,16 @@ fn auto_value_string_getter(name: &[u8]) -> Option<&'static [u8]> {
         b"getPlatformParams" => Some(b""),
         b"getVrContext" => Some(b""),
         b"getSurface" => Some(b""),
+        // DeviceParams (recon v2 shape). osVersion is the Vulkan GATE: below
+        // "33" the engine refuses to initialize the Vulkan renderer, so a real
+        // value here is load-bearing, not cosmetic.
+        b"getOsVersion" => Some(b"33"),
+        b"getDeviceName" => Some(b"Cordial"),
+        b"getDeviceSku" => Some(b"cordial"),
+        b"getManufacturer" => Some(b"Cordial"),
+        b"getCountry" => Some(b"US"),
+        b"getNetworkType" => Some(b"WIFI"),
+        b"getAppVersion" => Some(b""),
         _ => None,
     }
 }
@@ -639,12 +653,22 @@ extern "C" fn jni_call_object_method(
 }
 
 /// CallBooleanMethod(env, obj, methodID, ...): the AppBridge params boolean
-/// getters. isUnder13 defaults false. Unrecognized -> 0 (false).
+/// getters. Defaults per recon v2 — isUnder13/isPotato/isTablet/isVrDevice/
+/// isTouchDevice/isLowRamDevice false, isKeyboardDevice/isMouseDevice/
+/// isCpu64Bit true. Unrecognized -> 0 (false).
 extern "C" fn jni_call_boolean_method(
     _e: u64, _obj: u64, mid: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
     match method_id_name(mid).as_deref() {
-        Some(b"isUnder13") => 0, // default false
+        Some(b"isUnder13") => 0,        // default false
+        Some(b"isPotato") => 0,
+        Some(b"isTablet") => 0,
+        Some(b"isVrDevice") => 0,
+        Some(b"isTouchDevice") => 0,
+        Some(b"isLowRamDevice") => 0,
+        Some(b"isKeyboardDevice") => 1, // true (desktop has a keyboard)
+        Some(b"isMouseDevice") => 1,
+        Some(b"isCpu64Bit") => 1,       // true (we are 64-bit)
         _ => 0,
     }
 }
@@ -656,6 +680,32 @@ extern "C" fn jni_call_int_method(
 ) -> u64 {
     match method_id_name(mid).as_deref() {
         Some(b"getMembershipType") => 0,
+        _ => 0,
+    }
+}
+
+/// CallLongMethod(env, obj, methodID, ...): the AppBridge params long getters.
+/// getAppUserId defaults 0; deviceMemoryMB is 8192 (recon v2). Unrecognized -> 0.
+extern "C" fn jni_call_long_method(
+    _e: u64, _obj: u64, mid: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+) -> u64 {
+    match method_id_name(mid).as_deref() {
+        Some(b"getAppUserId") => 0,
+        Some(b"getDeviceTotalMemoryMB") => 8192,
+        _ => 0,
+    }
+}
+
+/// CallFloatMethod(env, obj, methodID, ...) — `jfloat` getters. Returns a
+/// `u32` bit-pattern that the dispatcher writes into guest s0 (the AAPCS64
+/// float return register), so the layout gate getDpiScale yields 1.0 rather
+/// than a collapsed 0. Registered as a `HostJniF32` bridge (whole-CpuState,
+/// s0-return); the args (env/obj/mid) are read from the x-registers in state.
+extern "C" fn jni_call_float_method(state: *mut crate::jit::CpuState) -> u32 {
+    let st = unsafe { &*state };
+    let mid = st.x[2];
+    match method_id_name(mid).as_deref() {
+        Some(b"getDpiScale") => 1.0f32.to_bits(), // layout gate; read 3x
         _ => 0,
     }
 }
@@ -889,6 +939,8 @@ pub fn build_jni() -> (u64, u64) {
         functions[CALL_OBJECT_METHOD] = reg(jni_call_object_method);
         functions[CALL_BOOLEAN_METHOD] = reg(jni_call_boolean_method);
         functions[CALL_INT_METHOD] = reg(jni_call_int_method);
+        functions[CALL_LONG_METHOD] = reg(jni_call_long_method);
+        functions[CALL_FLOAT_METHOD] = reg_jni_f32(jni_call_float_method);
         functions[CALL_VOID_METHOD] = ok;
         functions[CALL_STATIC_OBJECT_METHOD] = reg(jni_voidp_0);
         functions[CALL_STATIC_BOOLEAN_METHOD] = reg(jni_voidp_0);
@@ -937,6 +989,11 @@ pub fn build_jni() -> (u64, u64) {
 
 fn reg(f: HostCall) -> u64 {
     register_host_call_auto(f)
+}
+
+/// Register a JNI float-return bridge in the dedicated s0-return thunk region.
+fn reg_jni_f32(f: HostJniF32) -> u64 {
+    crate::jit::register_jni_f32_call(f)
 }
 
 /// Allocate (host==guest) memory for a u64 table; return its address.
@@ -1325,9 +1382,11 @@ mod tests {
         assert_eq!(IS_SAME_OBJECT, 24, "IsSameObject");
         assert_eq!(GET_OBJECT_CLASS, 31, "GetObjectClass");
         assert_eq!(IS_INSTANCE_OF, 32, "IsInstanceOf");
-        assert_eq!(CALL_OBJECT_METHOD, 34, "CallObjectMethod");
-        assert_eq!(CALL_INT_METHOD, 49, "CallIntMethod");
-        assert_eq!(CALL_VOID_METHOD, 61, "CallVoidMethod");
+        assert_eq!(CALL_OBJECT_METHOD, 34, "CallObjectMethod (NDK)");
+        assert_eq!(CALL_INT_METHOD, 49, "CallIntMethod (NDK)");
+        assert_eq!(CALL_LONG_METHOD, 52, "CallLongMethod (NDK)");
+        assert_eq!(CALL_FLOAT_METHOD, 55, "CallFloatMethod (NDK)");
+        assert_eq!(CALL_VOID_METHOD, 61, "CallVoidMethod (NDK)");
         assert_eq!(CALL_STATIC_OBJECT_METHOD, 114, "CallStaticObjectMethod");
         assert_eq!(CALL_STATIC_INT_METHOD, 129, "CallStaticIntMethod");
         assert_eq!(CALL_STATIC_VOID_METHOD, 141, "CallStaticVoidMethod");
@@ -1484,6 +1543,13 @@ mod tests {
                 &b"getPlatformParams"[..],
                 &b"getVrContext"[..],
                 &b"getSurface"[..],
+                &b"getOsVersion"[..],
+                &b"getDeviceName"[..],
+                &b"getDeviceSku"[..],
+                &b"getManufacturer"[..],
+                &b"getCountry"[..],
+                &b"getNetworkType"[..],
+                &b"getAppVersion"[..],
             ] {
                 let mid = get_name_id(name);
                 assert_ne!(mid, 0, "GetMethodID({}) non-null", String::from_utf8_lossy(name));
@@ -1491,30 +1557,83 @@ mod tests {
                 let h = g_om(env, 0x4321, mid, 0, 0, 0, 0, 0);
                 assert_ne!(h, 0, "CallObjectMethod({}) returns a readable jstring", String::from_utf8_lossy(name));
                 // The returned handle is a readable zero-length (or for
-                // selectedTheme "Dark") jstring — GetStringUTFLength reads it.
+                // selectedTheme "Dark", getOsVersion "33") jstring —
+                // GetStringUTFLength reads it.
                 let (g_sl, _) = host_call_at(get(GET_STRING_UTF_LEN)).expect("GetStringUTFLength thunk");
                 let len = g_sl(env, h, 0, 0, 0, 0, 0, 0);
-                if name == &b"getSelectedTheme"[..] {
-                    assert_eq!(len, 4, "selectedTheme defaults to \"Dark\"");
-                } else {
-                    assert_eq!(len, 0, "{} defaults to empty", String::from_utf8_lossy(name));
+                match name {
+                    b"getSelectedTheme" => assert_eq!(len, 4, "selectedTheme defaults to \"Dark\""),
+                    b"getOsVersion" => assert_eq!(len, 2, "osVersion defaults to \"33\""),
+                    b"getDeviceName" => assert_eq!(len, 7, "getDeviceName \"Cordial\""),
+                    b"getDeviceSku" => assert_eq!(len, 7, "getDeviceSku \"cordial\""),
+                    b"getManufacturer" => assert_eq!(len, 7, "getManufacturer \"Cordial\""),
+                    b"getCountry" => assert_eq!(len, 2, "getCountry \"US\""),
+                    b"getNetworkType" => assert_eq!(len, 4, "getNetworkType \"WIFI\""),
+                    _ => assert_eq!(len, 0, "{} defaults to empty", String::from_utf8_lossy(name)),
                 }
             }
-            // Boolean getter -> 0 (isUnder13 false); int getter -> 0.
-            let mid = get_name_id(b"isUnder13");
+            // Boolean getters -> per recon v2 shape (isUnder13 false, keyboard
+            // true); int getter getMembershipType -> 0; long getter
+            // getAppUserId -> 0.
             let (g_bm, _) = host_call_at(get(CALL_BOOLEAN_METHOD)).expect("CallBooleanMethod thunk");
-            let b = g_bm(env, 0x4321, mid, 0, 0, 0, 0, 0);
-            assert_eq!(b, 0, "isUnder13 default false");
+            assert_eq!(g_bm(env, 0x4321, get_name_id(b"isUnder13"), 0, 0, 0, 0, 0), 0, "isUnder13 false");
+            assert_eq!(g_bm(env, 0x4321, get_name_id(b"isTouchDevice"), 0, 0, 0, 0, 0), 0, "isTouchDevice false");
+            assert_eq!(g_bm(env, 0x4321, get_name_id(b"isKeyboardDevice"), 0, 0, 0, 0, 0), 1, "isKeyboardDevice true");
             let mid2 = get_name_id(b"getMembershipType");
             let (g_im, _) = host_call_at(get(CALL_INT_METHOD)).expect("CallIntMethod thunk");
-            let iv = g_im(env, 0x4321, mid2, 0, 0, 0, 0, 0);
-            assert_eq!(iv, 0, "getMembershipType default 0");
+            assert_eq!(g_im(env, 0x4321, mid2, 0, 0, 0, 0, 0), 0, "getMembershipType default 0");
+            let (g_lm, _) = host_call_at(get(CALL_LONG_METHOD)).expect("CallLongMethod thunk");
+            assert_eq!(g_lm(env, 0x4321, get_name_id(b"getAppUserId"), 0, 0, 0, 0, 0), 0, "getAppUserId default 0");
             // Unrecognized method name still returns 0 (legacy fallback) — so
             // unrelated Call*Method sites (real Java re-entry) are unchanged.
             let midx = get_name_id(b"someOtherMethod");
             let (g_om2, _) = host_call_at(get(CALL_OBJECT_METHOD)).expect("CallObjectMethod thunk");
-            let v = g_om2(env, 0x4321, midx, 0, 0, 0, 0, 0);
-            assert_eq!(v, 0, "unrecognized getter falls back to NULL/0");
+            assert_eq!(g_om2(env, 0x4321, midx, 0, 0, 0, 0, 0), 0, "unrecognized getter falls back to NULL/0");
         }
+    }
+
+    /// The NDK JNIEnv table dispatches CallFloatMethod through slot 55, but
+    /// that slot is a HostJniF32 bridge (in the s0-return thunk region), NOT an
+    /// integer hostcall — so it must be non-null and distinct, and the guest
+    /// reading s0 after the blr gets the real jfloat. This JIT-runs real guest
+    /// aarch64 that does `CallFloatMethod(env, obj, getDpiScale)` through the
+    /// official table and returns the float bits via `fmov w0, s0`.
+    #[test]
+    fn jni_call_float_method_returns_jfloat_in_s0_via_jit() {
+        use crate::jit::{jit_run, CpuState};
+        let (env, _vm) = build_jni();
+        unsafe {
+            let functions = *(env as *const u64);
+            let f_slot = *(functions as *const u64).add(CALL_FLOAT_METHOD);
+            assert_ne!(f_slot, 0, "CallFloatMethod slot non-null");
+            // It must be a float-return thunk, not an integer hostcall slot.
+            assert_ne!(f_slot, *(functions as *const u64).add(CALL_OBJECT_METHOD));
+        }
+        let mid = new_string_utf_handle(b"getDpiScale");
+        let obj: u64 = 0x4321;
+
+        // base=0x1000; x0=env, x1=obj, x2=mid.
+        //   ldr x9,[x0]         ; functions = [env]
+        //   ldr x10,[x9,#440]   ; functions[55] = CallFloatMethod (55*8)
+        //   blr x10             ; -> s0 = 1.0f32 bits
+        //   fmov w0,s0          ; w0 = s0 bits (float return -> GPR for assert)
+        //   brk #0              ; halt -> pc=0, jit_run returns Ok(x0)
+        let code: [u32; 5] = [
+            0xf9400009, // ldr x9,[x0]
+            0xf940dd2a, // ldr x10,[x9,#440]  (55<<3)
+            0xd63f0140, // blr x10
+            0x1e260000, // fmov w0,s0
+            0xd4200000, // brk #0 (halt)
+        ];
+        let bytes: Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let mut st = CpuState::new();
+        st.x[0] = env;
+        st.x[1] = obj;
+        st.x[2] = mid;
+        let res = jit_run(&bytes, 0x1000, 0x1000, &mut st as *mut CpuState);
+        assert!(res.is_ok(), "jit_run over CallFloatMethod: {res:?}");
+        // s0 (v0 low 32) must hold 1.0f32 bits after the dispatch.
+        assert_eq!(st.v[0] & 0xffff_ffff, 1.0f32.to_bits() as u64, "s0 = getDpiScale 1.0");
+        assert_eq!(st.x[0] & 0xffff_ffff, 1.0f32.to_bits() as u64, "fmov w0,s0 saw 1.0");
     }
 }

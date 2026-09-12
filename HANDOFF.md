@@ -1,5 +1,39 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH55) — completed the AutoValue params getter-value registry (CallLongMethod + CallFloatMethod now serve real values via a new s0-return JNI bridge) and re-tested the ordered V2 ladder WITH a complete params layer (which SH54 lacked): it still stalls at `nativeGameGlobalInit` (parks, never returns) and cannot populate `[0x106829ea8]`. Workspace **499/0** (was 498/0, +1). Doc docs/frontier-sh55-jni-value-registry.md, artifact runs/sh55-v2boot-ladder.txt.
+
+Recon-v2 Task-2 (the json-abort root cause) is that jni.rs routed every `Call*Method`
+to typed-0, so StartApp's json serialization read uninitialized guest-stack std::strings.
+SH54 wired Object/Boolean/Int; this cycle completes the prescribed surface:
+
+1. **CallLongMethod (NDK slot 52, newly wired)** — getAppUserId→0, getDeviceTotalMemoryMB→8192.
+2. **CallFloatMethod (NDK slot 55, newly wired)** — getDpiScale→1.0. A `jfloat` returns in
+   the FP register **s0**, not x0 (AAPCS64). New `HostJniF32` bridge + thunk region
+   (jit.rs): a whole-CpuState bridge reads the methodID from x2 and the dispatcher writes
+   the u32 into guest s0 before resuming at x30 — the existing float32 bridge drops the
+   integer-register args and the GLES bridge writes x0 not s0, so neither could serve it.
+   Regression proves a real guest `blr` through env->functions[55] lands 1.0f32 in s0
+   (`fmov w0,s0; brk #0`; a naive `ret` looped on its own post-blr x30).
+3. **String getters** extended with DeviceParams: getOsVersion→"33" (Vulkan GATE), device
+   name/sku/manufacturer→Cordial, country→US, networkType→WIFI, appVersion→"".
+4. **Booleans** per recon v2 (isUnder13…isLowRamDevice false; isKeyboardDevice/
+   isMouseDevice/isCpu64Bit true).
+
+**Empirical (runs/sh55-v2boot-ladder.txt, exit 124):** the full stable product recipe +
+`--v2boot` on the real libroblox.so: render + persist baseline INTACT (no regression),
+zero SIGSEGV/SIGABRT, zero json overflow — but the ladder reaches only
+`driving nativeGameGlobalInit`, which does **not return** (runs real init then parks), so
+rungs 2–6 never run on the detached driver thread and [0x106829ea8] stays **0**. This is
+SH54's wall re-measured WITH the complete params layer (so StartApp's serialization would
+have real values) — re-confirming the recon Task-1 (APS2) verdict at runtime: the
+ordered-ladder reframe does not populate the type-4 producer vector headlessly.
+
+Standing structural wall unchanged: `[0x106829ea8]` is framework-glue-seeded only; the ONLY
+proven live dispatch plane is `--taskv4-seed <real-handler>` + `--deque-node-live` (SH44
+live-when-seeded; SH49 sustainable at 197 pops). Next frontier: feed a REAL engine
+frame/session producer address into the seed so a sustainably-dispatched task node advances
+the engine toward its own frame/screen.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH54) — built the ordered V2-boot ladder drive (`--v2boot`) + AutoValue getter shim — the empirical runtime test SH53 left open — and confirmed the type-4 producer vector `[0x106829ea8]` stays 0 while the real `nativeGameGlobalInit` executes. Workspace **498/0** (was 497/0, +1). Doc docs/frontier-sh54-v2boot-ladder.md, artifact runs/sh54-v2boot-{ladder,fw,progress,threads}.txt.
 
 The recon (docs/recon-framework-boot-order.md) demands driving the real V2 boot
