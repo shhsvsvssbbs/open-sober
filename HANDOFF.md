@@ -36,6 +36,17 @@ or synthesizing its draw item's vt[+24] → real geometry emitter 0x105b35288); 
 0x105b353d0, the SH25-34 proven path) as the per-node render-obj so a populated
 node actually draws engine-detailed content.
 
+**SH64 empirical note (present walker, reverted):** a mid-cycle attempt to drive
+the engine's REAL present walker found (1) the full `0x105b2ed48` body aborts at
+entry (TLS canary + nativeOnDestroyed teardown tail fault), and (2) driving just
+the present-loop region 0x105b2eec0 (x19=R) DID run the engine's real per-node
+loop and blr our fabricated per-item draw (`item draw #1 engine frame-fn Ok`) —
+validating the per-scene-item vt[+24] draw ABI — but SIGSEGVs on iteration 2
+because the item thunk's nested jit_run recompiles the very present-loop block
+(SH44/49 drain-desync class). Next try: patch the walker's parked
+nativeGameGlobalInit bl (0x5b2ee54)→ret so its full body runs natively, or draw
+through the already-seeded GLES slots (no nested jit_run at the loop address).
+
 ## Session (Sep 13, 2026, hermes-worker, cycle SH62) — drove the engine's REAL scene renderer (guest 0x105b2ead4): the engine constructs+registers its OWN frame-desc (vtable 0x1067317b0) and presents it via the real ctx swap — replacing the SH60/61 harness-fabricated clear-path renderer. Workspace **507/0** (was 506/0, +1). Commits b30eaae + b39a525. Doc docs/frontier-sh62-renderscene.md, artifact runs/sh62-renderscene.txt, repro runs/capture_renderscene.sh.
 
 Two READ-ONLY research subagents + my disasm of real libroblox.so pinned the concrete

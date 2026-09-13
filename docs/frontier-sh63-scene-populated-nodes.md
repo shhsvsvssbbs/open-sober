@@ -83,3 +83,34 @@ side is gated on nativeGameGlobalInit, so reach it by setting the walker's R+559
 geometry emitter 0x105b35288); or (b) target the engine's own geometry emitter
 (0x105b35288 / primitive-setup 0x105b353d0, the SH25-34 proven path) as the
 per-node render-obj so a populated node actually draws engine-detailed content.
+
+## SH64 empirical note (present-walker drive attempted, reverted — read before re-trying)
+
+I tried driving the engine's REAL per-node PRESENT walker to make it draw
+engine-detailed content, and captured a hard empirical constraint:
+
+- **Full-body drive of `0x105b2ed48` aborts at entry** (SIGSEGV guestpc=0x105b2ed48,
+  fault=0x18) — its prologue/epilogue touch TLS stack-canary + the post-present
+  teardown tail calls `nativeOnDestroyed` helpers (0x2839ae4/0x283a3f8), which
+  fault when entered from the harness with only the gate bytes
+  (R+559=0/R+664=0/R+608=1) set. Not a clean drive.
+- **Mid-function present-loop region `0x105b2eec0` (x19=R preset via CpuState):
+  the engine's real loop DOES run and blr's our fabricated per-item draw** —
+  `item draw #1 engine frame-fn Ok(0x...)` (real engine frame-fn 0x105b32c00 ran),
+  validating the exact per-scene-item `vt[+24]` draw ABI a Lua-created screen's
+  node+8 item would dispatch. But the run SIGSEGVs on the SECOND loop iteration
+  (0x105b2eedc): the nested `jit_run` inside the item draw thunk recompiled /
+  replaced the very present-loop block the outer jit_run was currently executing
+  — the same class as the SH44/SH49 drain recompile-desync. So per-node present
+  via a thunk that itself drives engine code is blocked by block-cache mutation
+  while mid-block.
+- **Conclusion / next-try:** to present via the engine's real per-node loop, the
+  per-item draw must NOT trigger a nested jit_run that recompiles the
+  present-loop block — either (i) pre-compile/lock the present-loop block so a
+  nested drive can't evict it, or (ii) synthesize the draw as a host-thunk that
+  calls the geometry emitter through the ALREADY-seeded GLES dispatch-table slots
+  (no nested jit_run at the present-loop address), or (iii) patch the walker's
+  parked `nativeGameGlobalInit` bl (0x5b2ee54) to a `ret` so its FULL body runs
+  natively to the present loop + real swap. This is left as the standing next
+  frontier; the SH63 per-node frame-BUILD (this cycle) is the committed,
+  verified deliverable.
