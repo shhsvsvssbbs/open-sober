@@ -77,7 +77,7 @@ runs/capture_taskv4_frame.sh.
 
 - `cargo build --workspace` clean (only pre-existing E0133 `unsafe_op_in_unsafe_fn`
   warnings / unused-name warnings; none in the new lines).
-- `cargo test --workspace` **506/0**. `runs/capture_taskv4_frame.sh` (real
+- `cargo test --workspace` **505/0**. `runs/capture_taskv4_frame.sh` (real
   libroblox.so, full productized boot + `--taskv4-seed frame`): exit 124
   (stable idle), vector seeded, both heartbeat sites patched, RENDERCTX
   recovered with real EGL display/surface/context (vtable 0x106731ae0),
