@@ -1,5 +1,45 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 12, 2026, hermes-worker, cycle SH59) — drove the recon-v1 "still-live lower-effort" V1 6-jstring start (`nativeAppBridgeAppStart__`, file 0x2338510 / guest 0x102338510) as a STANDALONE primary `--startapp-v1` — the first time the V1 entry has been exercised headlessly. Workspace **504/0** (was 503/0, +1). Commits d5e9ccb, a528b5e. Doc docs/frontier-sh59-v1-appstart.md, artifact runs/sh59-v1-appstart.txt.
+
+Recon-v1 (docs/recon-framework-boot-order.md) names the V1 6-jstring
+`nativeAppBridgeAppStart__` the "still-live lower-effort alternative" that
+bypasses the AutoValue params layer; recon-v2 §Task-2 blames the StartApp
+json-abort on the JNI shim collapsing that params layer. But SH54-58 only ever
+ran V1 as the **unreachable tail** of the v2boot ladder (which stalls at rung 1
+`nativeGameGlobalInit` every cycle), so the V1 entry's downstream never executed
+and its ABI was never even exercised:
+
+- **New elfjit `--startapp-v1`**: swaps the primary `--startapp` target from
+  V2StartAppWithParams to V1 `AppStart__`, building the s2 ABI as 5 empty
+  jstrings (x2,x3,x5,x6,x7) + jboolean false (x4=0) per the exact mangled-JNI
+  descriptor `String,String,Z,String,String,String`. V1 reads plain jstrings
+  straight from the registers (no AutoValue jobject, no Call*Method getter), so
+  it **bypasses the params-collapse json-abort completely**.
+- **Fixed a latent wrong ABI** in the never-reachable v2boot V1 fallback: it
+  put a jstring handle in the `Z` boolean slot (x4) and left x7=0 — corrected to
+  the true descriptor.
+- **New regression** `v1_app_start_six_arg_abi_is_five_strings_plus_boolean`
+  pins the ABI (5 readable guest-addressable jstring handles; x4 Z-slot exactly
+  0; no String handle aliases the boolean slot).
+
+**Empirical (real libroblox.so, full productized render recipe + `--startapp-v1`,
+artifact runs/sh59-v1-appstart.txt, exit 124):** engine's OWN frame-fn renders a
+real indexed triangle (centroid red) + textured quad (BL=RED/BR=GREEN/TR=WHITE/
+TL=BLUE) + 4 fresh quad-loop frames (swaps Ok(0x1)), byte-exact persist
+roundtrip (45 B, REMEMBERED session), **zero** json-string-length-overflow /
+SIGSEGV / SIGABRT / ENOSYS — the V1 path executes clean where V2's params layer
+was suspect.
+
+**Honest scope:** V1 advances the engine to the **same** structural place as V2
+(the main loop parks on the lifecycle-await futex lr=0x10284d134; the type-4
+producer vector `[0x106829ea8]` stays 0 — framework-glue-installed only), so a
+self-driven home/session screen is not yet reached; frames remain harness-driven
+on the live engine context. Contribution is empirical + corrective: recon-v1's
+lower-effort alternative is now proven clean + standalone-callable, and its
+previously-wrong ABI is fixed + pinned so future V1 work starts from a correct
+register layout. Standing structural wall unchanged.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH58) — first REAL-guest-handler type-4 seed executed on the real binary: the drain's w4=4 dispatch `br`'d into the engine's OWN frame-fn (real engine code ran at guestpc 0x105b2e98c) before ABI-faulting. Workspace **503/0** (was 502/0, +1). Commit 2922518. Doc docs/frontier-sh58-taskv4-realseed.md, artifacts runs/sh58-{taskv4-realseed,taskv4-sustain,baseline}.txt.
 
 Every SH44-57 frontier doc names the same next step: "feed a REAL engine
