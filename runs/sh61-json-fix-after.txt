@@ -1,0 +1,52 @@
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x55d603252010
+[plt] bound 534 JUMP_SLOT + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7fc9553be010 (4194304 buckets, shared zero sub @0x7fc9573be010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7fc9553be010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x55d631f23440 tls(tpidr)=0x55d631f23550
+JNI boot: x0 = JavaVM* 0x55d631b0a430
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x55d631b0a400 jobject=0x55d63205f910 params=0x55d632075a50)
+[json-fix] append check 0x102355d40 would overflow (len=0xb3 cap=0) -> forcing len=0 (SSO empty append)
+[json-fix] append check 0x102355d40 would overflow (len=0x24 cap=0) -> forcing len=0 (SSO empty append)
+
+[SIGSEGV] tid=2901404 fault=0x0 rip=0x7fc94cbfb294 guestpc=0x102175854 rbx_matches_gueststate=true (reg_state=0x7fc94dffc578, tid=3)
+  x0=0x9ae16a3b2f90404f x1=0x0 x2=0x0 x3=0x7fc94ddfb948 x4=0x7fc94ddfb9b8
+  x5=0x1 x6=0x0 x7=0x0 x8=0x1 x9=0x55d603252008 sp=0x7fc94ddfb890
+  x10=0x0 x19=0x106b0a8a0 x20=0x7fc940035580 x21=0x9ae16a3b2f90404f x22=0xd65f03c0a8c17bfd
+  x23=0x2 x28=0x0 x29=0x7fc94ddfb890 lr(x30)=0x102175854 lsm_map_global=0x7fc9553be010
+  HOST rax=0xd65f03c0a8c17bfd rbx=0x7fc94dffc578 rcx=0x1 rdx=0xd65f03c0a8c17c05 rsi=0x7fc94dffc578 rdi=0x7fc94dffc578
+  HOST rbp=0x7fc94dffcdd0 rsp=0x7fc94dffaab8 r8=0x19bf0c87 r9=0x0 r10=0x1 r11=0x7fc9577db080
+  HOST r12=0x55d63250d9e0 r13=0x16 r14=0x55d6325116e0 r15=0x55d60320d8c8 eflags=0x10282
+  GUEST_THREADS (2901358:1,0x7fc954c95578) (2901359:2,0x7fc954783578) (2901357:0,0x7fff4fc9dd88) (2901404:3,0x7fc94dffc578) in_jit_run=true
+  raw[]= 81 e8 01 00 00 00 48 89 83 d0 00 00 00 48 8b 93 b0 00 00 00 48 8d 52 08 48 8b 02 48 89 43 40 48 8b 43 40 48 8b 8b a8 00 00 00 48 29 c8 50 51 52
+
+  BT: -> HOST(0x7fc95763fb7b)
+
+[SIGABRT] tid=2901404 fault=0x3e9002c456d rip=0x7fc95764195c guestpc=0x0 rbx_matches_gueststate=false (reg_state=0x7fc94dffc578, tid=3)
+  x0=0x0 x1=0x0 x2=0x0 x3=0x0 x4=0x0
+  x5=0x0 x6=0x0 x7=0x0 x8=0x0 x9=0x0 sp=0x0
+  x10=0x0 x19=0x0 x20=0x0 x21=0x0 x22=0x0
+  x23=0x0 x28=0x0 x29=0x0 lr(x30)=0x0 lsm_map_global=0x7fc9553be010
+  HOST rax=0x0 rbx=0x2c459c rcx=0x7fc95764195c rdx=0x6 rsi=0x2c459c rdi=0x2c456d
+  HOST rbp=0x7fc94dff91d0 rsp=0x7fc94dff90c0 r8=0xa0 r9=0x0 r10=0x40 r11=0x246
+  HOST r12=0x7fc94dffc578 r13=0x6 r14=0x7fc94dffcdd0 r15=0x7fc94dffc578 eflags=0x246
+  GUEST_THREADS (2901358:1,0x7fc954c95578) (2901359:2,0x7fc954783578) (2901357:0,0x7fff4fc9dd88) (2901404:3,0x7fc94dffc578) in_jit_run=true
+  raw[]= 00 0f 05 89 c3 e8 92 f4 04 00 44 89 ea 89 de 89 c7 b8 ea 00 00 00 0f 05 89 c3 f7 db 3d 00 f0 ff ff b8 00 00 00 00 0f 47 c3 e9 76 ff ff ff 66 0f
+
+  BT: -> 0x55d6031cdbc9 -> 0x55d602fc2a19

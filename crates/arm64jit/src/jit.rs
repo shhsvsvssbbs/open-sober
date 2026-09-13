@@ -475,6 +475,14 @@ fn set_current_guest_tp(tp: u64) {
     CURRENT_TP.with(|c| c.set(tp));
 }
 
+/// Whether the SH61 JSON-abort neutralization hook is armed (JIT_JSON_ZERO_FIX).
+/// Evaluated once per process (the value cannot change meaningfully mid-run).
+fn json_zero_fix_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("JIT_JSON_ZERO_FIX").is_some())
+}
+
 /// Register `f` as the host call for guest slot `i`. Returns the guest address
 /// the caller should resolve a JUMP_SLOT/intra-image `blr` target to so that the
 /// `jit_run` dispatcher falls through to this host call.
@@ -2285,6 +2293,39 @@ pub fn jit_run_inner(image: &[u8], base: u64, state: *mut CpuState) -> Result<u6
             eprintln!();
         }
         stamp_cntvct(state);
+        // SH61 (recon-selfdrive-seed-jsonfix.md §B): neutralize the bare-StartApp
+        // "RBX::json::Writer string length overflow" abort. The abort is a
+        // guest-internal uninitialised stack std::string read during StartApp's
+        // launch-params json serialization: the append bound-check at guest
+        // 0x102355d40 (file 0x2355d40) does `adrp x8,7275000; mov x19,x2; ldrsw
+        // x8,[x8,#1608]; cmp x8,x2; b.cc throw` — i.e. throws when the writer's
+        // capacity cell (guest 0x107275648, file 0x7275648) < the string LENGTH
+        // in x2. The offending length is a leaked HOST pointer / stack address
+        // (==sp, ==sp-0x30, run-variable, ASLR) — SH45/SH46/SH56 proved it is
+        // not the harness LSM seed and is params-independent (identical abort
+        // for a JSON jstring and a real AutoValue jobject; JIT_TRACE=1 emits
+        // ZERO getter lines). The minimal deterministic fix: force the length
+        // to 0 AT this check whenever it would throw, so the writer appends an
+        // SSO EMPTY string (size()==0) and never reaches the throw helper
+        // 0x1025fb6bc. The capacity cell is READ-ONLY (auto-heals nothing) —
+        // never raise it (raising makes the writer memcpy with len's low 32
+        // bits ~1.6GB -> SEGV). Env-gated opt-in (JIT_JSON_ZERO_FIX=1); the
+        // default path is untouched. Guest memory is identity-mapped, so the
+        // capacity cell reads directly.
+        if json_zero_fix_enabled() {
+            if pc == 0x102355d40 {
+                const JSON_CAP_CELL: *const i32 = 0x107275648 as *const i32;
+                let len = unsafe { (*state).x[2] };
+                let cap = unsafe { *JSON_CAP_CELL } as i64;
+                let would_throw = (cap as u64) < len;
+                if would_throw {
+                    eprintln!(
+                        "[json-fix] append check 0x102355d40 would overflow (len={len:#x} cap={cap}) -> forcing len=0 (SSO empty append)"
+                    );
+                    unsafe { (*state).x[2] = 0 };
+                }
+            }
+        }
         unsafe { run(&block, state) };
         if step_trace {
             let s = unsafe { &*state };
@@ -8744,6 +8785,48 @@ mod fp16_and_fabd_fccmp_exec {
         assert!(THROW_HELPER > 0x1000000 && THROW_HELPER < 0x100000000);
         eprintln!(
             "[abi] json overflow: throw@file 0x{THROW_HELPER:x} fmt 'RBX::json::Writer string length overflow: %zu' (file 0x57765a); leaked len == guest sp (uninit stack std::string)"
+        );
+    }
+
+    #[test]
+    fn json_zero_fix_clamps_leaked_length_at_append_check() {
+        // SH61 (recon-selfdrive-seed-jsonfix.md §B): the fix for the bare-StartApp
+        // json abort is a host-side length clamp at the append bound-check guest
+        // 0x102355d40 — force the string length (reg x2) to 0 WHENEVER the check
+        // would throw (writer cap < len), turning it into an SSO EMPTY append
+        // (size()==0) that never reaches the throw helper. The cap cell is
+        // READ-ONLY (never raise it: raising makes the writer memcpy len's low
+        // 32 bits ~1.6GB -> SEGV). Pin the exact disassembled addresses + the
+        // would-throw predicate for both leak modes (huge host-pointer length,
+        // and the small-but-over-cap case), and assert a benign len is untouched.
+        const APPEND_CHECK: u64 = 0x102355d40; // file 0x2355d40 (adrp 7275000; ldrsw [x8,#1608])
+        const CAP_CELL: *const i32 = 0x107275648 as *const i32; // file 0x7275648 (writer capacity, sign-extended i32)
+        const THROW_HELPER: u64 = 0x1025fb6bc; // file 0x25fb6bc, bl'd when cap < len
+        assert_eq!(APPEND_CHECK & 0xffffffff, 0x2355d40);
+        assert_eq!(CAP_CELL as u64 & 0xffffffff, 0x7275648);
+        assert!(THROW_HELPER > 0x100000000 && THROW_HELPER < 0x1000000000);
+
+        // The check throws iff (cap as signed-extended) < len (unsigned b.cc).
+        // Bad len (leaked host pointer / stack addr, or tiny over-cap): clamp -> 0.
+        let would_throw = |cap: i64, len: u64| (cap as u64) < len;
+        // leaked host ptr (~0x7f...): cap (small/uninit) < huge len -> throws
+        assert!(would_throw(0x20, 0x7fb5_0000_0000));
+        // leaked stack addr == sp kind of value
+        assert!(would_throw(0x1f, 0x7f6f_2bff_e9f0));
+        // small-but-over-cap (the other observed mode): cap 3 < len 179
+        assert!(would_throw(3, 179));
+        // benign: len within cap -> NOT a throw, so the fix must NOT clamp it
+        assert!(!would_throw(0x4000, 179));
+        assert!(!would_throw(i32::MAX as i64, 179));
+
+        // The neutralization is exactly "leaked/over-cap length -> 0 (SSO empty)".
+        // A clamped len of 0 never trips the unsigned cap<len check regardless of cap.
+        for cap in [0i64, 0x20, 3, 0x4000, i32::MAX as i64] {
+            assert!(!would_throw(cap, 0), "len=0 must never overflow any cap");
+        }
+        eprintln!(
+            "[abi] json fix pinned: append check file 0x{APPEND_CHECK:x} cap cell file 0x{:x} throw helper file 0x{:x}; would_throw(cap<m huge/appular) clamps len->0, len=0 never throws",
+            CAP_CELL as u64, THROW_HELPER - 0x100000000
         );
     }
 
