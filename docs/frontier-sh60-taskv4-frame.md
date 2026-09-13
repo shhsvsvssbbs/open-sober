@@ -114,3 +114,45 @@ dispatch rides the engine's real drain/dispatcher and its own frame machinery.
 Next: bridge the w4=4 dispatch rate into the post-ctx window (drive a drain
 cycle after RENDERCTX so the flood lands post-ctx), and chase swap Ok(0x0) on
 the cross-thread path; then feed a real engine session producer.
+
+### Static-RE findings for the next cycle (research subagent, read-only on the
+### real libroblox.so, file = guest - 0x100000000; RW segment VMA = file+0x4000)
+
+- **The engine's REAL frame-plane driver is guest 0x105b2ead4** (the "scene
+  renderer"), NOT the clear-path frame-fn 0x105b32c00. It consumes the engine
+  render-manager `R` (this=x0): `R+0x160`(=352)=ctx, `R+0x170`(=368)=view/surface
+  (w,h at +112/+116), walks a per-item scene list `R+0x180`(=384, node stride
+  0x28) and builds+presents a per-item frame each iteration (0x98-byte frame
+  desc via 0x5b34de8, linked via 0x5b2d9e0). Returns 1. It binds the real ctx
+  first (`ldr x8,[R+352]; ldr x8,[x8,#0x10]; blr x8`). It only renders real
+  frames once the engine has CONSTRUCTED a populated render-manager (`R+384`
+  scene list + real surface w/h) — which requires the engine's game/UI setup
+  (Lua, textures, login scene). That is the standing blocker: there is NO free
+  in-image function that renders real login/home from a clean recovered ctx.
+- **EGL ctx object** (0x48 B, vtable 0x106731ae0 set by ctor file 0x5b3b288):
+  `+0x00` vtable, `+0x08` u32 flag, `+0x10` child/trampoline ptr (0->self, only
+  overrides DISPLAY), `+0x18` ANativeWindow*, `+0x20` EGLDisplay, `+0x28`
+  EGLSurface (draw=read), `+0x30` EGLContext, `+0x40` u8 window-swapped flag,
+  `+0x44` u32 frame counter.
+- **make-current guest 0x105b3b358** (ctx vtable [+0x10]): calls
+  eglGetCurrentContext(); if == ctx[+0x30] returns; base = ctx[+0x10] ? ctx[+0x10]
+  : ctx; eglMakeCurrent(*(base+0x20), ctx[+0x28], ctx[+0x28], ctx[+0x30]); then
+  tail 0x5b2ae3c (overdraw config if [ctx+0x08]).
+- **swap thunk guest 0x105b3b408**: `ldp x8,x1,[x0,+0x20]; b eglSwapBuffers`
+  — it NEVER binds. EGL surfaces/displays are NOT thread-bound; only the current
+  binding is thread-local. So a swap on a thread where the ctx isn't current
+  returns EGL_FALSE — the exact cause of the drain-thread `swap Ok(0x0)`.
+- **Per-surface present / GL-state master guest 0x105b2b0d4** (driver caps via
+  glGetString, makes current, allocates 0x370-B frame obj, drives item draws +
+  GL enable state). **The only geometry emitter: guest 0x105b352c0** (the sole
+  glDrawElements@0x5b35334 / glDrawArrays@0x5b35398 sites; mode from table
+  [0x225000+0x780 + i*4]).
+- Ctx vtables are materialized at runtime (file bytes all-zero; only 534 relocs),
+  so any new vtable calls must go through the recovered/relocated vtable, not raw
+  file data.
+- **Host-EGL make-current experiment FAILED** (two threads calling host
+  eglMakeCurrent + nested run_guest_callback concurrently SIGSEGV'd — 0
+  presents); the engine-make-current (run_guest_callback) approach in the frame
+  thunk is the stable path. To close swap Ok(0x0) on the drain thread, serialize
+  presenters to ONE thread (the drain thread, real task-pops) and have that
+  thread bind via the engine 0x105b3b358 before each swap.
