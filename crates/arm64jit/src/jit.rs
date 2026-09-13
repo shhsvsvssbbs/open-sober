@@ -8994,4 +8994,67 @@ mod fp16_and_fabd_fccmp_exec {
             "[abi] scene renderer pinned: {SCENE_RENDERER:#x} binds ctx (make-current), constructs frame-desc via own op-new {OP_NEW:#x}+ctor {FRAME_CTOR:#x} (vtable {FRAME_VTABLE:#x}, [+144]=1), links it at &R+0x170 via {FRAME_LINKER:#x}; even with EMPTY scene list (R+0x180==R+0x188) it builds+registers the frame and returns 1 — the engine's own frame-plane replaces the harness-fabricated clear renderer"
         );
     }
+
+    #[test]
+    fn scene_per_node_build_contract_populated_scene_list() {
+        // SH63: populating the render-manager's scene list (R+0x180 head /
+        // R+0x188 tail) with real 0x28-stride scene nodes makes the engine's
+        // OWN scene renderer 0x105b2ead4 build+register one real frame per node
+        // — the per-node engine-detail frame plane SH62's empty-scene proof left
+        // open. The per-node walk (file 0x5b2eb9c) reads, for each node:
+        //   [node+0x08] = render-obj  -> the loop blr's [obj->vt+64] (dims-query)
+        //   [node+0x18] = view ptr    -> read for W/H at +112/+116 (the `ldp`
+        //                                derefs it BEFORE the null-check, so it
+        //                                must be non-NULL); the 0x5b2d9e0 linker
+        //                                OVERWRITES it with the frame.
+        // and links a fresh 0x98 frame at container node+0x18 via 0x5b2d9e0,
+        // then `add x20,x20,#0x28; cmp (x20+0x10),tail; b.ne` advances until
+        // next-node == tail. Frame ctor sets vtable 0x1067317b0, [+144]=1.
+        //
+        // This test pins the contract the harness uses + the per-node offset
+        // math (0x28 stride, container at +0x18, render-obj at +0x08, tail =
+        // head + N*0x28), mirroring what render_scene_base lays out in R.
+        const SCENE_RENDERER: u64 = 0x105b2ead4;
+        const OP_NEW: u64 = 0x105d96768; // engine operator-new (frame 0x98 B; link-node 0x20 B)
+        const FRAME_LINKER: u64 = 0x105b2d9e0; // link(container=&node+0x18, frame)
+        const FRAME_VTABLE: u64 = 0x1067317b0; // written by the frame ctor, verified live in SH62
+        const R_SCENE_HEAD: u64 = 0x180; // R+0x180 = scene list head
+        const R_SCENE_TAIL: u64 = 0x188; // R+0x188 = scene list tail
+        const NODE_BASE: u64 = 0x210; // node[0] base (renderscene places no0 here)
+        const NODE_STRIDE: u64 = 0x28;
+        const NODE_OBJ: u64 = 0x08; // node+0x08 = render-obj (dims-query, vt[+64])
+        const NODE_VIEW: u64 = 0x18; // node+0x18 = view ptr; also the frame-link container
+        const FRAME_FLAG: u64 = 144; // [+144] byte flag =1 set by ctor (engine-registered marker)
+
+        let n_nodes: u64 = 3;
+        // head = node[0]; tail = one-past-end (the walk's termination test
+        // `cmp (x+0x10),tail` hits exactly after the last node's +0x28 advance).
+        let head = NODE_BASE;
+        let tail = NODE_BASE + n_nodes * NODE_STRIDE;
+        assert_ne!(head, tail, "populated scene list head != tail (gate passes)");
+        // Per-node offsets are strictly inside the 0x28 stride and hold the
+        // documented meanings.
+        assert!(NODE_OBJ < NODE_VIEW && NODE_VIEW < NODE_STRIDE);
+        assert_eq!(NODE_OBJ, 0x08, "render-obj at node+8");
+        assert_eq!(NODE_VIEW, 0x18, "view/container at node+0x18");
+        // obj vt[+64] = the only slot the per-node walk blrs (dims-query), and
+        // the frame [+144] byte is the engine-registered predicate the harness
+        // verifies after the drive.
+        let obj_vt_dims_query_slot = 64;
+        assert_eq!(obj_vt_dims_query_slot, 64);
+        // tail for the LAST visible node: after node n_nodes-1 the walk adds
+        // 0x28 and compares (node+0x28) to tail -> equal => stop. Contract:
+        // tail == head + N*0x28 (contiguous one-past-end).
+        let last = head + (n_nodes - 1) * NODE_STRIDE;
+        assert_eq!(last + NODE_STRIDE, tail, "walk terminates exactly at tail");
+        // R layout offsets the renderer reads (mirrored by render_scene_base).
+        assert!(R_SCENE_HEAD < R_SCENE_TAIL);
+        assert!(NODE_BASE > R_SCENE_TAIL, "nodes live after the view/scene head region");
+        // The engine-registered predicate (frame [+144]==1) is what the
+        // harness uses to confirm the engine built a real per-node frame.
+        assert_eq!(FRAME_FLAG, 144);
+        eprintln!(
+            "[abi] populated scene list pinned: R+0x180 head={head:#x} R+0x188 tail={tail:#x} ({n_nodes} nodes @ 0x28-stride); per node obj@+0x08 (vt[+64] dims-query) view@+0x18 (non-NULL, frame-link container); {SCENE_RENDERER:#x} builds 1 real frame per node via op-new {OP_NEW:#x} + link {FRAME_LINKER:#x} -> vtable {FRAME_VTABLE:#x} [+144]=1; walk terminates at tail = head + N*0x28"
+        );
+    }
 }

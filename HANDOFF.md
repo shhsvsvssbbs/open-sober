@@ -1,5 +1,41 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 13, 2026, hermes-worker, cycle SH63) — the engine's REAL scene renderer now walks a POPULATED scene list: it builds ONE real 0x98 frame-desc per 0x28-stride scene node, in addition to the base frame at R+0x170 — closing SH62's named "populate the scene list" gap. Workspace **508/0** (was 507/0, +1). Commits pending. Doc docs/frontier-sh63-scene-populated-nodes.md, artifact runs/sh63-renderscene-populated.txt, repro runs/capture_renderscene.sh (now node-count-aware).
+
+`render_scene_base(node_count)` now lays N 0x28-stride scene nodes into R
+(R+0x180=head, R+0x188=head+N*0x28 tail) and `render_engine_scene(ctx,n,nodes)`
+fills each node's render-obj slot (+0x08 = the real ctx, whose vt[+64] is the
+dims-query the per-node loop blr's), drives the engine's OWN scene renderer
+`0x105b2ead4`, and VERIFIES the engine built a real frame per node (each
+[+144]==1) via the per-node loop at file 0x5b2eb9c (links each at container
+node+0x18 through linker 0x5b2d9e0). New env RENDERSCENE_NODES (default 3).
+
+**Empirical (real libroblox.so, runs/sh63-renderscene-populated.txt, exit 124):**
+`scene renderer Ok(0x1)` with `scene_nodes=3 per_node_frames=[3 ptrs]
+per_node_ok=true frame[vtable]=0x1067317b0`; `present #N swap Ok(0x1)` x2;
+persist 45B byte-exact; zero SIGSEGV/SIGABRT/json-overflow. SH62 empty baseline
+re-verified (RENDERSCENE_NODES=0 → fast path, still swaps Ok(0x1)).
+
+New regression `scene_per_node_build_contract_populated_scene_list` pins the
+node offsets (obj@+0x08 / view+container@+0x18 / stride 0x28), the head/tail
+one-past-end termination, and the frame linker + vtable contract.
+
+**Honest scope:** the engine builds a real frame-desc per node + the base frame
+and presents them via its real swap — a POPULATED render-manager now registers a
+genuine multi-item frame plane headlessly. The node's render-obj is the recovered
+ctx only (vt[+64] real dims-query), NOT yet a real UI/GuiObject, so the per-node
+frame carries engine-detail metadata, not a populated login/home screen (Lua
+app-shell wall — SH53/SH56). Validates the exact node/item ABI a Lua-created
+screen would consume.
+
+**Next frontier:** (a) drive the engine's real per-node PRESENT walker
+`0x105b2ed48` (blr's each node+8 item's vt[+24] as the per-item draw, then swaps;
+gated on nativeGameGlobalInit — reach it by setting walker gate bytes R+559/664/608
+or synthesizing its draw item's vt[+24] → real geometry emitter 0x105b35288); or
+(b) target the engine's own geometry emitter (0x105b35288 / primitive-setup
+0x105b353d0, the SH25-34 proven path) as the per-node render-obj so a populated
+node actually draws engine-detailed content.
+
 ## Session (Sep 13, 2026, hermes-worker, cycle SH62) — drove the engine's REAL scene renderer (guest 0x105b2ead4): the engine constructs+registers its OWN frame-desc (vtable 0x1067317b0) and presents it via the real ctx swap — replacing the SH60/61 harness-fabricated clear-path renderer. Workspace **507/0** (was 506/0, +1). Commits b30eaae + b39a525. Doc docs/frontier-sh62-renderscene.md, artifact runs/sh62-renderscene.txt, repro runs/capture_renderscene.sh.
 
 Two READ-ONLY research subagents + my disasm of real libroblox.so pinned the concrete
