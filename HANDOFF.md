@@ -1,5 +1,59 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 13, 2026, hermes-worker, cycle SH61) — DELIVERED recon-v3 deliverable (2): the RBX::json::Writer stack-leak fix. New env-gated JIT hook (JIT_JSON_ZERO_FIX=1, OnceLock-evaluated `json_zero_fix_enabled`) clamps the string LENGTH (reg x2) to 0 at the append bound-check guest 0x102355d40 exactly when it would throw (writer cap cell guest 0x107275648 < len → `cmp x8,x2; b.cc`), so the leaked uninitialised-stack-string write becomes a libc++ SSO EMPTY append (size()==0) that never reaches the throw helper 0x1025fb6bc. Workspace **506/0** (was 505/0, +1). Commit 63302e2. Doc docs/frontier-sh61-json-fix.md, artifact runs/sh61-json-fix-after.txt + runs/sh61-product-reverify.txt. **Both recon-v3 deliverables are now implemented & measured headlessly.**
+
+A research subagent (deleg_6bb58b66, read-only on the repo + binary disasm) refined
+the brief's proposed fix. The recon suggested zero-filling the leaking guest-stack
+slot at `[append-entry-sp-0x38]`, but static disasm could not positively confirm
+that slot lies inside a live frame (it is below the check-fn's own frame —
+red-zone/caller-below), so a stack write there is unverified. The subagent's
+recommended register clamp delivers the SAME "size()==0 → SSO empty" effect with no
+out-of-frame write and no frame-offset re-derivation:
+
+- **Patch (jit.rs run_loop, at block entry):** when armed and pc == 0x102355d40, read
+  len = reg x2 and cap = i32 at guest 0x107275648 (disasm: `adrp x8,7275000; ldrsw
+  x8,[x8,#1608]`); if `(cap as u64) < len` — the exact `b.cc` throw condition — set
+  x2 := 0. Guest memory is identity-mapped so the cap reads directly; ASLR-immune.
+- **Capacity cell is READ-ONLY** — never raised (raising makes the writer memcpy with
+  len's low 32 bits ~1.6GB → SEGV), per the recon's hard rule.
+- **`json_zero_fix_enabled()`** evaluates JIT_JSON_ZERO_FIX once via `OnceLock` (not
+  per-block), keeping the hot loop clean. Off by default → production path untouched.
+
+**Verified on real libroblox.so (bare StartApp, no render recipe):**
+- WITHOUT the fix: `libc++abi: terminating ... RBX::json::Writer string length
+  overflow: 139734512814576` (run-variable host heap ptr), exit 139.
+- WITH JIT_JSON_ZERO_FIX=1: `[json-fix] ... would overflow (len=0xb3 cap=0)` +
+  `(len=0x24 cap=0)`, then `grep -c "json::Writer string length overflow"` = **0**;
+  StartApp's json serialization proceeds. Both leak modes covered (huge host-pointer
+  len, small-but-over-cap len); benign len ≤ cap untouched.
+
+**Honest boundary:** the fix eliminates only the json abortion. The bare `--jni
+--startapp` path (NO render/lifecycle drive) then proceeds deeper into boot and hits a
+DIFFERENT pre-existing fault — SIGSEGV at guestpc 0x102175854 (`ldr x23,[x20,#8]`,
+null deref in a GameActivity/FMOD init region), exit 134/SIGABRT. That is the
+SH45-documented bare-path wall (only the full productized recipe with
+JIT_DRIVE_LIFECYCLE + render-init boots clean, exit 124). The json fix does not
+regress the productized path (re-verified green below).
+
+**Productized baseline re-verified unchanged (runs/sh61-product-reverify.txt):**
+real indexed triangle (centroid RGBA(255,0,0,255)) + textured quad (BL=RED/
+BR=GREEN/TR=WHITE/TL=BLUE exact texels) + 7 swap Ok(0x1) + persist 45B byte-exact +
+0 json-overflow/SIGSEGV/SIGABRT (quad-loop was still animating fresh frames when the
+foreground cap cut it at 180s; the hook is off here so it is inert on this path).
+
+New regression `json_zero_fix_clamps_leaked_length_at_append_check` pins the disasm
+addresses (check file 0x2355d40 / cap cell file 0x7275648 / throw helper file
+0x25fb6bc), the `(cap as u64) < len` predicate for both leak modes, benign-len
+non-clamp, and len==0 never tripping any cap.
+
+**Next frontier (unchanged, SH60):** bridge the w4=4 dispatch rate into the post-ctx
+window (drive a drain cycle after RENDERCTX), chase `swap Ok(0x0)` on the cross-thread
+path (serialize presenters to one thread; engine 0x105b3b408 never binds, EGL
+current-binding is thread-local), and feed a real engine session producer. The engine's
+REAL frame-plane driver is guest 0x105b2ead4 (scene renderer: R+0x160 ctx / R+0x170
+view / R+0x180 scene list) — it only renders real login/home once the engine constructs
+a populated render-manager, which needs its game/UI setup.
+
 ## Session (Sep 13, 2026, hermes-worker, cycle SH60) — DELIVERED recon-v3 deliverable (1): the SELF-DRIVEN task-frame plane. `--taskv4-seed frame` registers a `type4_frame_thunk` host-thunk into the dispatcher's type-4 vector [0x106829ea8]; each w4=4 dispatch marshals into a REAL presented frame (engine make-current 0x105b3b358 -> frame-fn 0x105b32c00 -> swap 0x105b3b408) on the recovered real ctx (vtable 0x106731ae0). **`present #147942 swap Ok(0x1)`** on the live EGL display/surface/context is the concrete measured marker; the task counter hit #147942 (w4=4 dispatches reaching the thunk en masse). Workspace **505/0** (was 504/0, +1). Doc docs/frontier-sh60-taskv4-frame.md, artifact runs/sh60-taskv4-frame.txt, reproducible runs/capture_taskv4_frame.sh.
 
 Three new pieces landed (elfjit.rs):
