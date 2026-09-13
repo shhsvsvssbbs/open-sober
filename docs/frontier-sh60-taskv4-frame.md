@@ -11,7 +11,7 @@ recovered engine ctx. **`present #147942 swap Ok(0x1)`** on the live EGL
 display/surface/context is the concrete marker — the task-consumer ABI now
 produces real frames, task-driven rather than harness-frame-loop driven.
 
-Workspace **506/0** (was 504/0, +2). Commits landed on local `dev`. Artifact
+Workspace **505/0** (was 504/0, +1). Commits landed on local `dev`. Artifact
 runs/sh60-taskv4-frame.txt, doc docs/frontier-sh60-taskv4-frame.md, reproducible
 runs/capture_taskv4_frame.sh.
 

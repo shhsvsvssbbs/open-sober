@@ -8790,4 +8790,63 @@ mod fp16_and_fabd_fccmp_exec {
             0x105b2e98cu64
         );
     }
+
+    #[test]
+    fn type4_vector_seed_accepts_registered_host_thunk_abi() {
+        // SH60 (recon-selfdrive-seed-jsonfix.md §A): the task-driven-frame seed
+        // (`--taskv4-seed frame`) is a REGISTERED non-recursive HOST-THUNK (via
+        // register_host_call_auto) written into the dispatcher's type-4 vector
+        // [0x106829ea8] — the exact proven `probe` mechanism (SH44/SH49/SH58),
+        // with a handler that marshals each dispatched task node into a REAL
+        // presented frame. This pins the mechanical contract a real producer
+        // seed must hold:
+        //   (1) register_host_call_auto places the handler in the reserved host
+        //       thunk region (guest addr 0x7f00_0000_0000+) that the JIT
+        //       dispatcher recognizes;
+        //   (2) host_call_at resolves that address back to the same handler, so
+        //       seeding the vector with it is a valid open-addressed `br x3`
+        //       target;
+        //   (3) the thunk ABI is (node=x0, [node+32]&~1=x1, consumer=x2) — a
+        //       leaf whose return is discarded (must NOT re-enter the
+        //       dispatcher/drain/vector, which would recurse).
+        const TASKV4_VECTOR: u64 = 0x106829ea8; // guest .bss slot the drain br's to (w4=4)
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        extern "C" fn fake_task_consumer(
+            node: u64, arg1: u64, consumer: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64,
+            _a7: u64,
+        ) -> u64 {
+            CALLS.fetch_add(1, Ordering::Relaxed);
+            // The vector ABI passes the node + its dispatch metadata, not a
+            // renderer — a frame thunk derives its work from these, and returns
+            // (discarded by the drain).
+            assert!(node >= 0x100000000 && node >> 56 == 0, "node is a guest low48 ptr");
+            assert_eq!(arg1 & !1, arg1, "[node+32]&~1 strips the low bit");
+            assert!(consumer >= 0x100000000, "consumer is a guest ctx pointer");
+            0
+        }
+        let addr = register_host_call_auto(fake_task_consumer);
+        assert!(
+            addr >= 0x7f00_0000_0000,
+            "registered host-thunk seed lands in the reserved host-call region: {addr:#x}"
+        );
+        // The vector is a plain readable function-pointer slot (guest==host), so
+        // `--taskv4-seed frame` writes this addr into it and a w4=4 dispatch
+        // `br x3` routes through the JIT's host-call bridge. Here (no guest
+        // image mapped in this unit-test process) we cannot deref 0x106829ea8,
+        // so pin the contract instead: host_call_at resolves the seeded addr
+        // back to the SAME handler, and invoking that handler executes the task
+        // consumer with the vector ABI.
+        let (resolved, _slot) = host_call_at(addr).expect("host thunk addr resolves back");
+        let before = CALLS.load(Ordering::Relaxed);
+        resolved(0x106700000, 0x106700020, 0x102b4cd50, 0, 4, 0, 0, 0);
+        assert_eq!(
+            CALLS.load(Ordering::Relaxed),
+            before + 1,
+            "dispatcher-visible seed executes the task consumer"
+        );
+        eprintln!(
+            "[abi] type4 frame-seed: register_host_call_auto -> {addr:#x} (host-call region), host_call_at resolves to the same fn; writing it into vector [{TASKV4_VECTOR:#x}] makes a w4=4 dispatch br into the task thunk (node, [node+32]&~1, consumer) ABI"
+        );
+    }
 }

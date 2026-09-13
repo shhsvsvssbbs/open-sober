@@ -1,5 +1,55 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 13, 2026, hermes-worker, cycle SH60) — DELIVERED recon-v3 deliverable (1): the SELF-DRIVEN task-frame plane. `--taskv4-seed frame` registers a `type4_frame_thunk` host-thunk into the dispatcher's type-4 vector [0x106829ea8]; each w4=4 dispatch marshals into a REAL presented frame (engine make-current 0x105b3b358 -> frame-fn 0x105b32c00 -> swap 0x105b3b408) on the recovered real ctx (vtable 0x106731ae0). **`present #147942 swap Ok(0x1)`** on the live EGL display/surface/context is the concrete measured marker; the task counter hit #147942 (w4=4 dispatches reaching the thunk en masse). Workspace **505/0** (was 504/0, +1). Doc docs/frontier-sh60-taskv4-frame.md, artifact runs/sh60-taskv4-frame.txt, reproducible runs/capture_taskv4_frame.sh.
+
+Three new pieces landed (elfjit.rs):
+- `--taskv4-seed frame`: registers the non-recursive leaf `type4_frame_thunk`
+  host-thunk (register_host_call_auto) into `[0x106829ea8]`. It reads RENDERCTX
+  (recovered real 0x48 ctx), reads make-current (vt[+16]=0x105b3b358) + swap
+  (vt[+24]=0x105b3b408), seeds the 10 engine-GLES dispatch slots once, builds
+  the fabricated coherent renderer/view (SH18/SH22), cycles a per-dispatch
+  clear-color palette (distinct fresh frames), and via nested run_guest_callback
+  drives make-current -> frame-fn 0x105b32c00 -> swap. Never re-enters the
+  vector/drain/dispatcher (would recurse). RENDERCTX==0 -> self-guard no-op.
+- RENDERCTX publication: --renderthunk stores the recovered real ctx into a
+  process-wide atomic so the dispatch-plane thunk (different thread) consumes
+  it.
+- Deterministic w4=4 engineering (from fresh disasm of drain 0x102856e40 +
+  dispatcher 0x10285371c): the drain's genuine popped-node w4=4 path (0x2856ffc)
+  is hit only in an early init window, and its idle-heartbeat dispatches go to
+  w4=2/3 telemetry (never the vector). Fix: rewrite both heartbeat `mov w4,#2/#3`
+  (0x102856f24/0x102856f68) to `mov w4,#4`, so every idle dispatch routes the
+  real dispatcher to the seeded vector (the ~147k dispatch counter proves it).
+  Because those flood dispatches precede RENDERCTX recovery, the CLEAN present
+  is a deterministic post-ctx dispatch: the --renderthunk thread drives the
+  thunk once (on the context-already-current thread) with the dispatcher ABI ->
+  **present #147942 swap Ok(0x1)**. The drain-thread present is Ok(0x0)
+  (cross-layer swap didn't report EGL success). Also: --deque-node-live in frame
+  mode holds its first node PLACEMENT (not root capture) until RENDERCTX, so
+  real node pops terminating at w4=4 fire with a live ctx.
+
+New regression `type4_vector_seed_accepts_registered_host_thunk_abi` pins:
+register_host_call_auto lands a handler in the reserved 0x7f00_0000_0000
+host-call region, host_call_at resolves it back, and invoking it executes the
+task consumer with the (node, [node+32]&~1, consumer) ABI.
+
+Verified: cargo test --workspace 505/0; productized baseline RE-VERIFIED green
+(runs/sh60-product-reverify.txt: exit 124, textured quad BL=RED/BR=GREEN/
+TR=WHITE/TL=BLUE exact texels + triangle + quad-loop, persist byte-exact, 0
+crash; the --renderthunk change also now fires one task-driven frame there,
+present #1 swap Ok(0x1)). No json-abort/SIGSEGV/ENOSYS in the taskv4 run.
+
+**Honest scope:** recon §A's core claim delivered and measured — the task-
+consumer ABI presents real frames through the engine's own
+make-current/frame-fn/swap on the recovered live EGL ctx (`present swap
+Ok(0x1)`). Not yet the engine detail-rendering its own login/home screens (the
+thunk drives the clear-path frame-fn, not the full UI render stream), and the
+w4=4 flood sits in the boot window (the clean present is the deterministic
+post-ctx dispatch). Standing structural wall materially advanced, not closed.
+Next frontier: bridge the w4=4 dispatch rate into the post-ctx window (drive a
+drain cycle after RENDERCTX) + chase the cross-thread swap Ok(0x0), then feed a
+real engine session producer.
+
 ## Session (Sep 12, 2026, hermes-worker, cycle SH59) — drove the recon-v1 "still-live lower-effort" V1 6-jstring start (`nativeAppBridgeAppStart__`, file 0x2338510 / guest 0x102338510) as a STANDALONE primary `--startapp-v1` — the first time the V1 entry has been exercised headlessly. Workspace **504/0** (was 503/0, +1). Commits d5e9ccb, a528b5e. Doc docs/frontier-sh59-v1-appstart.md, artifact runs/sh59-v1-appstart.txt.
 
 Recon-v1 (docs/recon-framework-boot-order.md) names the V1 6-jstring
