@@ -1,5 +1,48 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 13, 2026, hermes-worker, cycle SH61b) — closed the SH60 cross-thread swap Ok(0x0) wall. **On the real libroblox.so taskv4-frame recipe: 24/24 task-driven presents are now genuine eglSwapBuffers Ok(0x1), ZERO Ok(0x0)** (was 25 Ok(0x1) / 5924 Ok(0x0) in SH60), exit 124. Commit 68b3362. Doc docs/frontier-sh61b-single-owner-presenter.md, artifacts runs/sh61b-presenter.txt + runs/sh61b-product-reverify.txt.
+
+An empirical negative pinned the fix. I first tried a global presenter **mutex**
+around the whole bind→frame-fn→swap sequence (SH60's "serialize presenters"
+suggestion). It did NOT change the ratio (25/6399) — the Ok(0x1)s are exactly the 25
+renderinit-thread presents. Conclusion: the drain thread's run_guest_callback
+make-current cannot establish EGL currency even serialized (its guest callback path
+differs from the renderinit thread's). The fix is to ROUTE the present to the
+currency-owning thread, not to lock:
+
+- **`type4_frame_thunk` (drain thread) is now a pure producer**: accounts the
+  dispatch, reads the node's dispatchable flag ([node+40] bit0 — diagnostic only),
+  bumps a process-wide `PENDING_PRESENTS` counter, returns. No EGL work / no
+  run_guest_callback → safe + cheap on the drain thread, cannot hit the EGL-current
+  wall. Self-guards on RENDERCTX==0.
+- **New `present_one_task_frame(ctx, n)`**: engine make-current 0x105b3b358 →
+  frame-fn 0x105b32c00 → swap 0x105b3b408, returns the swap result.
+- **Presenter loop** on the --renderthunk thread (the ONE thread where render-init
+  left EGL current): drains PENDING_PRESENTS, rate-limited to a bounded window
+  (TASKFRAME_MAX_FRAMES / TASKFRAME_WINDOW_MS, default 24 / 2 s) so the run still
+  exits 124 cleanly. The drain flood adds PENDING orders of magnitude faster than
+  llvmpipe can present, so the bound keeps it a clean sustainable stream.
+
+**Verified** (runs/sh61b-presenter.txt, 8k-line log, exit 124): 24/24 `present
+swap Ok(0x1)`, 0 Ok(0x0), `presenter drained: 24 real task-driven frames presented
+(all on the currency-owning thread)`, 196 real NODE pops, dispatch counter #3.4M,
+zero crash/json-abort, persist roundtrip intact. **Productized baseline re-verified**
+(runs/sh61b-product-reverify.txt): exit 124, real triangle (centroid red) + textured
+quad (BL/BR/TR/TL) + 7 swap Ok(0x1) + persist 45B byte-exact + 0 crash; no-seed path
+fires the single deterministic present (SH60 marker preserved). Workspace 506/0.
+
+**Honest scope:** closes the swap-Ok(0x0) wall — task frames now present genuinely
+on the correct thread — but does not change WHAT is rendered (still the clear-path
+frame-fn with the fabricated renderer, not the engine's own login/home UI, which
+needs a populated render-manager). The PENDING counter can grow large during the
+flood (harmless u64, no stored frames).
+
+**Next frontier (unchanged):** feed a real engine session producer; the engine's
+REAL frame driver is guest 0x105b2ead4 (scene renderer: R+0x160 ctx / R+0x170 view /
+R+0x180 scene list) — only renders real login/home once the engine constructs a
+populated render-manager (needs its game/UI setup, Lua/textures/login scene). That is
+the standing structural wall for "engine renders its own real screens".
+
 ## Session (Sep 13, 2026, hermes-worker, cycle SH61) — DELIVERED recon-v3 deliverable (2): the RBX::json::Writer stack-leak fix. New env-gated JIT hook (JIT_JSON_ZERO_FIX=1, OnceLock-evaluated `json_zero_fix_enabled`) clamps the string LENGTH (reg x2) to 0 at the append bound-check guest 0x102355d40 exactly when it would throw (writer cap cell guest 0x107275648 < len → `cmp x8,x2; b.cc`), so the leaked uninitialised-stack-string write becomes a libc++ SSO EMPTY append (size()==0) that never reaches the throw helper 0x1025fb6bc. Workspace **506/0** (was 505/0, +1). Commit 63302e2. Doc docs/frontier-sh61-json-fix.md, artifact runs/sh61-json-fix-after.txt + runs/sh61-product-reverify.txt. **Both recon-v3 deliverables are now implemented & measured headlessly.**
 
 A research subagent (deleg_6bb58b66, read-only on the repo + binary disasm) refined
