@@ -82,6 +82,14 @@ static RENDERCTX: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64:
 /// drives; guest==host so the engine derefs it directly. Built once lazily.
 static TASK_FRAME_BASE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
+/// Base of the fabricated-but-engine-native render-manager R that
+/// `--renderscene` drives the engine's REAL scene renderer 0x105b2ead4 with.
+/// Layout mirrors what the engine's own render-manager ctor 0x5b2b0d4
+/// produces (R+0x160=ctx, R+0x170=frame-list root/view, R+0x180/0x188=scene
+/// list head/tail) so the engine's own frame construction code runs verbatim.
+/// Built once lazily; guest==host so engine code derefs it directly.
+static RENDERSCENE_BASE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
 /// SLES-dispatch slots seeded once before the first task frame (SH22-corrected
 /// clear-path names 0-7 + geometry draw slots 9/10). Seeding is idempotent.
 static GLES_SLOTS_SEEDED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -226,6 +234,153 @@ extern "C" fn type4_frame_thunk(
         );
     }
     0
+}
+
+/// Build the fabricated-but-engine-native render-manager R that `--renderscene`
+/// drives through the engine's OWN scene renderer (guest 0x105b2ead4).
+///
+/// The scene-renderer disasm (file 0x5b2ead4) reads, for this=x0=R:
+///   R+0x160 (352) = ctx (derefs [ctx] for its vtable; make-current/[vt+16],
+///                     dims-query/[vt+64], frame-cache-query/[vt+32])
+///   R+0x170 (368) = view pointer (reads W/H at [view+112]/[view+116])
+///   R+0x180/0x188 (384/392) = scene list head/tail (stride 0x28; equal EOF)
+/// It then: bind ctx, query dims, and — UNCONDITIONALLY, before ever checking
+/// the scene array — operator-new(0x98) -> frame-desc ctor 0x5b34de8(this,
+/// R, W, H, 1, 1, 4, w7) -> link 0x5b2d9e0(&R+0x170, frame). Only then does it
+/// walk R+0x180..R+0x188 (empty => skip) and return 1. So even with an empty
+/// scene array the ENGINE constructs a real 0x98 frame item and registers it
+/// into its own render-manager's frame list — replacing the harness-fabricated
+/// clear renderer with the engine's own frame-desc construction.
+///
+/// Returns the R base (guest==host, engine derefs it directly). R+0x170 points
+/// at an internal view sub-object (R+0x200) whose +112/+116 hold W/H so the
+/// renderer's dims read is real; R+0x180==R+0x188==0 (empty scene array, which
+/// still builds the frame-desc per the disasm).
+fn render_scene_base() -> u64 {
+    let existing = RENDERSCENE_BASE.load(core::sync::atomic::Ordering::Relaxed);
+    if existing != 0 {
+        return existing;
+    }
+    let objs = Box::leak(vec![0u8; 0x400].into_boxed_slice());
+    let r = objs.as_ptr() as u64;
+    let view = r + 0x200;
+    unsafe {
+        // R+0x160 = ctx slot (filled in by the caller with the recovered real ctx;
+        // left 0 here so render_engine_scene can store it after it's known).
+        // R+0x170 = view pointer -> internal view sub-object.
+        *(r.wrapping_add(0x170) as *mut u64) = view;
+        // View W/H at +112/+116 (the renderer's `ldp w1,w2,[x8,#112]`).
+        // These are DELIBERATELY set to values that never equal the real
+        // surface dims (engine dims-query vt[+64] returns the live EGL surface
+        // size, 1280x720 on the Xvfb window). Disasm of the renderer: it reads
+        // view W/H, queries the ctx dims, and takes the BUILD branch only when
+        // the two disagree (`b.ne` build; `cmp w8,x22; b.eq skip`). If we set
+        // them == the surface size the engine would wrongly conclude the frame
+        // already exists and SKIP construction, leaving R+0x170 pointing at our
+        // view (observed). Set them to a sentinel that can never match so the
+        // engine's operator-new/ctor/link runs and registers a real frame-desc
+        // at the REAL dims (the build passes w2/w3 = the queried dims).
+        *(view.wrapping_add(112) as *mut u32) = 0xFFFFFFFF;
+        *(view.wrapping_add(116) as *mut u32) = 0xFFFFFFFE;
+        // R+0x180 / R+0x188 = empty scene list (head == tail == 0 => the data
+        // path skips it but STILL builds the single frame-desc first).
+        *(r.wrapping_add(0x180) as *mut u64) = 0;
+        *(r.wrapping_add(0x188) as *mut u64) = 0;
+    }
+    RENDERSCENE_BASE.store(r, core::sync::atomic::Ordering::Relaxed);
+    r
+}
+
+/// Drive the engine's REAL scene renderer (guest 0x105b2ead4) on the CURRENT
+/// thread (must be the currency-owning renderinit thread) with the
+/// fabricated-but-engine-native render-manager R from `render_scene_base`.
+/// Binds ctx, then lets the ENGINE's own frame-desc ctor + linker construct +
+/// register a real 0x98 frame item into R+0x170, then swaps. Returns the swap
+/// result (1 == genuine present). Verifies the engine actually registered a
+/// real frame-desc (R+0x170 points at a non-zero engine frame with [+140] set,
+/// [+144]==1 byte) rather than a host-fabricated clear renderer.
+fn render_engine_scene(ctx: u64, n: u64) -> u64 {
+    if !(ctx >= 0x100000000 && ctx >> 56 == 0) {
+        return 0;
+    }
+    let vt = unsafe { *(ctx as *const u64) };
+    if !(vt >= 0x100000000 && vt >> 56 == 0) {
+        return 0;
+    }
+    let bind = unsafe { *(vt.wrapping_add(16) as *const u64) }; // 0x105b3b358 make-current
+    let swap = unsafe { *(vt.wrapping_add(24) as *const u64) }; // 0x105b3b408 eglSwapBuffers
+    let bind_ok = bind >= 0x100000000 && bind >> 56 == 0;
+    let swap_ok = swap >= 0x100000000 && swap >> 56 == 0;
+    if !bind_ok || !swap_ok {
+        eprintln!("[elfjit:renderscene] frame #{n}: ctx {ctx:#x} vt {vt:#x} bind {bind:#x} swap {swap:#x} — no live make-current/swap, skip");
+        return 0;
+    }
+    let r = render_scene_base();
+    unsafe {
+        // R+0x160 = the recovered real ctx (engine make-current + dims read it).
+        *(r.wrapping_add(0x160) as *mut u64) = ctx;
+    }
+    let tp = arm64jit::jit::current_guest_tp();
+    // Engine make-current so the engine's scene renderer + swap land on the
+    // live EGL context (currency-owning thread).
+    let _ = arm64jit::jit::run_guest_callback(bind, [ctx, 0, 0, 0, 0, 0, 0, 0], tp);
+    // Drive the engine's OWN scene renderer with R. This is the engine's real
+    // frame-plane driver: binds ctx, constructs a real 0x98 frame-desc via its
+    // own operator-new/ctor 0x5b34de8, links it into R+0x170 via 0x5b2d9e0,
+    // walks the (empty) scene list, returns 1.
+    let scene_ret = match arm64jit::jit::run_guest_callback(0x105b2ead4, [r, 0, 0, 0, 0, 0, 0, 0], tp) {
+        Err(e) => {
+            eprintln!("[elfjit:renderscene] frame #{n} scene renderer err: {e}");
+            return 0;
+        }
+        Ok(s) => s,
+    };
+    // Verify the engine registered a REAL frame-desc into R+0x170 (not a
+    // host-fabricated renderer): R+0x170[0] should now be a non-zero engine
+    // frame whose [+144] == 1 byte (the frame-desc ctor sets it) and vtable in
+    // the 0x106731xx realm.
+    let frame = unsafe { *(r.wrapping_add(0x170) as *const u64) };
+    let node = unsafe { *(r.wrapping_add(0x178) as *const u64) };
+    let engine_registered = frame >= 0x100000000
+        && frame >> 56 == 0
+        && (unsafe { *(frame.wrapping_add(144) as *const u8) }) == 1;
+    // Dump the constructed object's live fields as ENGINE-construction proof:
+    // the ctor 0x5b34de8 sets [frame+0]=vtable 0x106731b00 (guest realm),
+    // [+140]=w7, [+144]=1, and the base ctor 0x5b2a04c wrote the real W/H at
+    // +112/+116. Presenting them pins that the ENGINE (not the harness) built
+    // and registered this frame-desc.
+    let fmt = format!(
+        "[elfjit:renderscene] frame #{n} scene renderer Ok({scene_ret:#x}) -> R+0x170 frame={frame:#x} node={node:#x} engine_registered={engine_registered} frame[vtable]={:#x}[+140]={:#x} view={}x{}",
+        if frame >= 0x100000000 && frame >> 56 == 0 {
+            unsafe { *(frame as *const u64) }
+        } else {
+            0
+        },
+        if frame >= 0x100000000 && frame >> 56 == 0 {
+            unsafe { *(frame.wrapping_add(140) as *const u32) }
+        } else {
+            0
+        },
+        unsafe { *(r.wrapping_add(0x200 + 112) as *const u32) },
+        unsafe { *(r.wrapping_add(0x200 + 116) as *const u32) },
+    );
+    eprintln!("{fmt}");
+    if !engine_registered {
+        eprintln!("[elfjit:renderscene] frame #{n}: engine did NOT register a real frame-desc (frame {frame:#x}); skipping present");
+        return 0;
+    }
+    match arm64jit::jit::run_guest_callback(swap, [ctx, 0, 0, 0, 0, 0, 0, 0], tp) {
+        Err(e) => {
+            eprintln!("[elfjit:renderscene] frame #{n} swap err: {e}");
+            0
+        }
+        Ok(s) => {
+            eprintln!(
+                "[elfjit:renderscene] present #{n} swap Ok({s:#x}) — engine-scene-renderer frame presented (frame {frame:#x})"
+            );
+            s
+        }
+    }
 }
 
 /// Read a guest u64 (guest memory is identity-mapped).
@@ -2519,6 +2674,33 @@ fn main() {
                     // Non-frame seed value: still fire one deterministic present
                     // (SH60 marker) on this currency-owning thread.
                     let _ = present_one_task_frame(real_ctx, 0);
+                }
+                // --renderscene (opt-in, must accompany --renderinit + the
+                // renderthunk so RENDERCTX is the real ctx): drive the engine's
+                // OWN scene renderer (0x105b2ead4) with a fabricated-but-engine-
+                // native render-manager R, replacing the harness-fabricated
+                // clear-path renderer with the engine's real frame-desc
+                // construction (its own operator-new 0x1d96768 / frame ctor
+                // 0x5b34de8 / linker 0x5b2d9e0). Bounded window so the run still
+                // exits 124 cleanly. VERIFIES the engine registered a real
+                // frame-desc into R+0x170 before presenting.
+                if renderframe_args.iter().any(|a| a == "--renderscene") {
+                    let t0 = std::time::Instant::now();
+                    let max_window = std::time::Duration::from_millis(
+                        std::env::var("RENDERSCENE_WINDOW_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(1500),
+                    );
+                    let max_frames: u64 = std::env::var("RENDERSCENE_MAX_FRAMES")
+                        .ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+                    let mut presented: u64 = 0;
+                    while presented < max_frames && t0.elapsed() < max_window {
+                        if render_engine_scene(real_ctx, presented) == 1 {
+                            presented += 1;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(120));
+                    }
+                    eprintln!(
+                        "[elfjit:renderscene] drained: {presented} real engine-scene-renderer frames presented (engine-built frame-desc) on the currency-owning thread"
+                    );
                 }
             }
             let _ = &real_ctx;
