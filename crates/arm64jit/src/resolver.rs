@@ -973,7 +973,18 @@ pub fn resolve(name: &[u8]) -> Option<u64> {
 }
 
 /// Register `hostf` at a fresh resolver slot keyed by `key`; returns slot addr.
+///
+/// Caller holds the resolver lock. Concurrency-safe/idempotent: before
+/// allocating a new slot, re-check the cache for `key` — a concurrent resolver
+/// may have bound it between the caller's earlier cache-probe (which ran
+/// WITHOUT the lock, before the dlsym) and this call. Without this re-check the
+/// same name resolved on two threads allocates two DIFFERENT slots (adjacent,
+/// address off-by-8), breaking the slot-identity invariant (`addr==addr` for
+/// the same GLES name) that the resolver's public API and its tests rely on.
 fn alloc_slot(r: &mut Resolver, key: &CString, hostf: HostCall) -> Option<u64> {
+    if let Some(addr) = r.slots.get(key) {
+        return Some(*addr);
+    }
     if r.next >= crate::jit::HOST_THUNK_MAX {
         return None;
     }
