@@ -1,0 +1,117 @@
+[fsmap] armed persistence root SOBER_ANDROID_ROOT=/home/hermes-worker/.local/share/open-sober/android-root
+[persist] live datastore roundtrip: write=45B fsync=0 read_back_byte_exact=true on_disk=Some(true) host=/home/hermes-worker/.local/share/open-sober/android-root/data/user/0/com.roblox.client/databases/session.db
+[plt] patched __stack_chk_guard GOT 0x631aa30 (0x0) -> 0x557ab7fe9e30
+[plt] bound 534 JUMP_SLOT + 77 GLOB_DAT/ABS64 (0 unresolved), 1 unresolved
+PLT imports bound: 534 to host thunks (0 unbound)
+[mempool] big-alloc 0x1d9801c routed to host calloc (thunk @ 0x1062d9000)
+[mempool] thunk bytes: e0 03 01 aa 11 0a 40 f9 20 02 1f d6 00 00 00 00 08 00 00 00 (JIT-readable via guest image)
+loaded '/home/hermes-worker/.cache/open-sober/android-env/lib/libroblox.so': is_pie=true base_load_vaddr=0x0 e_entry=0x100000000
+  segment guest=[0x100000000,0x1062d8190) host=same prot=r-x
+  segment guest=[0x1062dc1c0,0x1067d3000) host=same prot=rw-
+  segment guest=[0x1067d67c0,0x107333c3c) host=same prot=rw-
+[tail] reserved 402653184B guest RW tail @0x107334000
+[lsm-map] allocator 0x1d97744 routed to host calloc(x0) (thunk @ 0x1062d9800)
+[lsm-map] NOP'd LSM init store at 0x101d975f8 (guest 0x1d975f8) to keep seeded empty map
+[lsm-map] seeded static empty LocalStorageManager map: global 0x10726f8c0 -> bucket array 0x7f673c39b010 (4194304 buckets, shared zero sub @0x7f673e39b010)
+[JNICall-singleton] seeded ptr 0x107333948 -> object 0x107333950 (zeroed bss ~ PTHREAD_MUTEX_INITIALIZER at +8)
+[lsm-map] readback global 0x10726f8c0 = 0x7f673c39b010 (must be non-zero)
+running entry guest=0x102173ff4 host=0x102173ff4 (segment base guest=0x100000000 size=0x7333c3c)
+guest sp=0x557ad569fbc0 tls(tpidr)=0x557ad569fcd0
+JNI boot: x0 = JavaVM* 0x557ad52875e0
+[roblox:JNIMain] TelemetryProtocol::setProcessTimeOverride: %ld
+[roblox:JNIMain] DeviceStaticParams is null.
+[elfjit] jit_run returned Ok(0x10006) — entering post-run phase
+JIT(no-QEMU) entry() -> 65542 (0x10006)
+[elfjit] driving StartApp @ guest 0x10258b144 after JNI_OnLoad (env=0x557ad52875b0 jobject=0x557ad57d9c10 params=0x557ad5c80b90)
+[elfjit:appcmd] posting APP_CMD_0 (1)
+[elfjit:kicker] host thread drives 0x106863af8 (pulse 1->2)
+[elfjit:kicker] t=0 guest_global 0x106863af8=%0x1
+[elfjit:appcmd] posting APP_CMD_1 (2)
+[elfjit:appcmd] posting APP_CMD_2 (11)
+[elfjit:anativewindow] wired real X11 window XID=0x200000 on :227 as the guest ANativeWindow
+[elfjit:kicker] t=100 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=200 guest_global 0x106863af8=%0x2
+[elfjit:kicker] t=300 guest_global 0x106863af8=%0x2
+[elfjit:renderinit] driving THUNK 0x105b3a280 after 1000ms warm-up (ctx 0x1067d16f0=0x557ab7fe9e28, x0=0x200000, x1=0x0)
+[elfjit:renderinit] returned Ok(0x7f6720001d90)
+[elfjit:renderthunk] REAL ctx 0x7f6720001d90 vtable=0x106731ae0 egl: display=0x7f672008b5e0 surface=0x7f672000bde0 context=0x7f67200a8590
+[elfjit:renderthunk] ctx vtable[0..5] = 0x105b3b288 0x105b3b334 0x105b3b358 0x105b3b408 0x101dc7428 — [vt+16](idx2)=disp target
+[elfjit:renderthunk] published RENDERCTX 0x7f6720001d90 — type-4 task frames will render on it
+[elfjit:taskv4-frame] seedgles slot 0 (glDrawBuffers) <- bridge 0x7f0000003018
+[elfjit:taskv4-frame] seedgles slot 1 (glClearBufferiv) <- bridge 0x7f0000003020
+[elfjit:taskv4-frame] seedgles slot 2 (glClearBufferfv) <- bridge 0x7f0000003028
+[elfjit:taskv4-frame] seedgles slot 3 (glClearBufferfi) <- bridge 0x7f0000018058
+[elfjit:taskv4-frame] seedgles slot 4 (glColorMask) <- bridge 0x7f0000002978
+[elfjit:taskv4-frame] seedgles slot 5 (glDepthMask) <- bridge 0x7f0000002998
+[elfjit:taskv4-frame] seedgles slot 6 (glStencilMask) <- bridge 0x7f00000029b0
+[elfjit:taskv4-frame] seedgles slot 7 (glViewport) <- bridge 0x7f0000002918
+[elfjit:taskv4-frame] seedgles slot 9 (glDrawElements) <- bridge 0x7f0000002a38
+[elfjit:taskv4-frame] seedgles slot 10 (glDrawArrays) <- bridge 0x7f0000002a40
+[elfjit:taskv4-frame] task frame #0 frame-fn Ok(0x7f6721da2260) ctx=0x7f6720001d90
+[elfjit:taskv4-frame] present #0 swap Ok(0x1) color=[0.4, 0.2, 0.95, 1.0] — real task-driven frame
+[elfjit:renderframe] ctx=0x7f6720001d90 [+32]=display 0x7f672008b5e0 [+40]=surface 0x7f672000bde0 [+48]=context 0x7f67200a8590
+[elfjit:renderframe] swap returned Ok(0x1) (eglSwapBuffers)
+[elfjit:renderframe-drive] clear-color x5 obj 0x7f67220c80a0 (RGBA [0.4, 0.2, 0.95, 1.0] at [+0..16])
+[elfjit:renderframe-drive] gles-dispatch slot 0 guest 0x106d3b2f0 = 0x7f0000003018
+[elfjit:renderframe-drive] gles-dispatch slot 1 guest 0x106d3b2f8 = 0x7f0000003020
+[elfjit:renderframe-drive] gles-dispatch slot 2 guest 0x106d3b300 = 0x7f0000003028
+[elfjit:renderframe-drive] gles-dispatch slot 3 guest 0x106d3b308 = 0x7f0000018058
+[elfjit:renderframe-drive] gles-dispatch slot 4 guest 0x106d3b310 = 0x7f0000002978
+[elfjit:renderframe-drive] gles-dispatch slot 5 guest 0x106d3b318 = 0x7f0000002998
+[elfjit:renderframe-drive] gles-dispatch slot 6 guest 0x106d3b320 = 0x7f00000029b0
+[elfjit:renderframe-drive] gles-dispatch slot 7 guest 0x106d3b328 = 0x7f0000002918
+[elfjit:renderframe-drive] gles-dispatch values = [139637976739864, 139637976739872, 139637976739880, 139637976825944, 139637976738168, 139637976738200, 139637976738224, 139637976738072]
+[elfjit:renderframe-seedgles] raw slot snapshot (before seed):
+[elfjit:renderframe-seedgles]   slot  0 = 0x00007f0000003018  
+[elfjit:renderframe-seedgles]   slot  1 = 0x00007f0000003020  
+[elfjit:renderframe-seedgles]   slot  2 = 0x00007f0000003028  
+[elfjit:renderframe-seedgles]   slot  3 = 0x00007f0000018058  
+[elfjit:renderframe-seedgles]   slot  4 = 0x00007f0000002978  
+[elfjit:renderframe-seedgles]   slot  5 = 0x00007f0000002998  
+[elfjit:renderframe-seedgles]   slot  6 = 0x00007f00000029b0  
+[elfjit:renderframe-seedgles]   slot  7 = 0x00007f0000002918  
+[elfjit:renderframe-seedgles]   slot  8 = 0x00007f0000003050  
+[elfjit:renderframe-seedgles]   slot  9 = 0x00007f0000002a38  
+[elfjit:renderframe-seedgles]   slot 10 = 0x00007f0000002a40  
+[elfjit:renderframe-seedgles]   slot 11 = 0x00007f0000003098  
+[elfjit:renderframe-seedgles]   slot 12 = 0x00007f0000003090  
+[elfjit:renderframe-seedgles]   slot 13 = 0x00007f00000030a0  
+[elfjit:renderframe-seedgles]   slot 14 = 0x00007f00000030a8  
+[elfjit:renderframe-seedgles]   slot 15 = 0x00007f00000030b0  
+[elfjit:renderframe-seedgles] slot 0 (glDrawBuffers) <- bridge 0x7f0000003018
+[elfjit:renderframe-seedgles] slot 1 (glClearBufferiv) <- bridge 0x7f0000003020
+[elfjit:renderframe-seedgles] slot 2 (glClearBufferfv) <- bridge 0x7f0000003028
+[elfjit:renderframe-seedgles] slot 3 (glClearBufferfi) <- bridge 0x7f0000018060
+[elfjit:renderframe-seedgles] slot 4 (glColorMask) <- bridge 0x7f0000002978
+[elfjit:renderframe-seedgles] slot 5 (glDepthMask) <- bridge 0x7f0000002998
+[elfjit:renderframe-seedgles] slot 6 (glStencilMask) <- bridge 0x7f00000029b0
+[elfjit:renderframe-seedgles] slot 7 (glViewport) <- bridge 0x7f0000002918
+[elfjit:renderframe-seedgles] slot 9 (glDrawElements) <- bridge 0x7f0000002a38
+[elfjit:renderframe-seedgles] slot 10 (glDrawArrays) <- bridge 0x7f0000002a40
+[elfjit:renderframe-drive] fabricated renderer 0x7f67220c7ba0 (+16=1,+24->0x7f67220c7ca0[+552]=1,+40->0x7f67220c7da0[+140]=1) view 0x7f67220c7ea0 ([+128]=1280 [+132]=720 [+140]=0)
+[elfjit:renderframe-drive] === frame iteration 0 color [0.4, 0.2, 0.95, 1.0] ===
+[elfjit:renderframe-drive] engine frame-fn 0x105b32c00 returned Ok(0x7f67220c7ba0)
+[elfjit:renderframe-drive] post-frame swap returned Ok(0x1)
+[elfjit:renderframe-drawprobe] fabricated renderer 0x7f67220b7ed0 ([+56]->cont, [+120]=ibo, [+142]=3, empty prim list)
+[elfjit:renderframe-drawprobe] geometry wrapper 0x5b35288 returned Ok(0x0)
+[elfjit:renderframe-triangle] compiled vs=0x1 fs=0x2
+[elfjit:renderframe-triangle] linked program=0x3 current
+[elfjit:renderframe-triangle] compile_status vs=0x1 fs=0x1 link_status=0x1
+[elfjit:renderframe-triangle] vbo=0x1 ebo=0x2 uploaded
+[elfjit:renderframe-triangle] coherent renderer 0x7f6722158980: container 0x7f6722158a80 prim 0x7f6722158d80 desc 0x7f6722158b80 desc_tbl@renderer+0x48 stride 0x7f6722158c80 ibo 0x7f6722158e80
+[elfjit:renderframe-triangle] geometry wrapper 0x5b35288 returned Ok(0x0) (real indexed glDrawElements drawn)
+[elfjit:renderframe-triangle] readback: centroid(640,360)=RGBA(255,0,0,255) top-left-bg(60,20)=RGBA(255,0,0,255) top-right-bg(1200,20)=RGBA(255,0,0,255)
+[elfjit:renderframe-triangle] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-drawprobe] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-quad] program=0x6 compiled+linked; texture tex_id=0x1 uTex=0x0
+[elfjit:renderframe-quad] vbo=0x3 ebo=0x4 4 interleaved verts stride24 + 6 idx uploaded (1x1 grid)
+[elfjit:renderframe-quad] coherent renderer: 2-prim list (aPos+aUV) + 6-idx EBO fabricated
+[elfjit:renderframe-quad] geometry wrapper 0x5b35288 returned Ok(0x0) (textured QUAD drawn)
+[elfjit:renderframe-quad] readback: BL=RGBA(255,0,0,255) BR=RGBA(0,255,0,255) TR=RGBA(255,255,255,255) TL=RGBA(0,0,255,255)
+[elfjit:renderframe-quad] post-draw swap returned Ok(0x1)
+[elfjit:renderframe-quad-loop] iter 0 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 1 drew+swap Ok(0x1) bg=[0.1, 0.9, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 2 drew+swap Ok(0x1) bg=[0.1, 0.1, 0.9, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 3 drew+swap Ok(0x1) bg=[0.9, 0.9, 0.1, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 4 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.9, 1.0] (fresh textured-quad frame)
+[elfjit:renderframe-quad-loop] iter 5 drew+swap Ok(0x1) bg=[0.9, 0.1, 0.1, 1.0] (fresh textured-quad frame)

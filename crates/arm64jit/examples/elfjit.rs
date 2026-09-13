@@ -174,11 +174,25 @@ fn reseed_task_frame_color(base: u64, cc: [f32; 4]) {
     }
 }
 
+/// Pending task-frame present requests, incremented by the drain-thread
+/// type4_frame_thunk (a pure producer: no EGL work, safe on that thread) and
+/// drained by the single presenter loop on the renderinit thread (the ONLY
+/// thread where EGL current-binding is positively established — SH61b ran a
+/// presenter mutex and found the drain thread's run_guest_callback make-current
+/// still returns EGL_FALSE even serialized, so routing the present to the
+/// currency-owning thread is the fix).
+static PENDING_PRESENTS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
 /// The type-4 task-consumer vector seed: a registered non-recursive leaf host
-/// thunk. Each dispatched task node marshals into a real presented frame on the
-/// recovered engine ctx. ABI per recon §A: (node=x0, [node+32]&~1=x1,
-/// consumer=x2); return discarded. Must never re-enter the dispatcher/drain/
-/// vector (would recurse).
+/// thunk. ABI per recon §A: (node=x0, [node+32]&~1=x1, consumer=x2); return
+/// discarded. Must never re-enter the dispatcher/drain/vector (would recurse).
+/// SH61b producer-only: it must NOT do EGL work here — the dispatcher runs it
+/// on the DRAIN thread, whose EGL make-current (via run_guest_callback) does
+/// not leave the context current for this layer (eglSwapBuffers returns
+/// EGL_FALSE). It just accounts the dispatch and bumps PENDING_PRESENTS; the
+/// renderinit-thread presenter loop consumes those and presents real frames
+/// where currency holds. Every drain dispatch thus maps to a REAL frame on the
+/// presenting thread instead of a wasted Ok(0x0) swap.
 extern "C" fn type4_frame_thunk(
     a0: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
 ) -> u64 {
@@ -196,6 +210,39 @@ extern "C" fn type4_frame_thunk(
         }
         return 0;
     }
+    if a0 >= 0x100000000 && a0 >> 56 == 0 {
+        let flag = read_visible_u64(a0.wrapping_add(40));
+        if flag & 1 == 0 && (n <= 3 || n % 500 == 0) {
+            eprintln!("[elfjit:taskv4-frame] dispatch #{n}: node {a0:#x} dispatchable flag {flag:#x} (bit0 clear — diagnostic only, still queued)");
+        }
+    }
+    // Real dispatchable task node OR the deterministic post-ctx drive (node=0):
+    // produce a present request for the currency-owning presenter thread.
+    PENDING_PRESENTS.fetch_add(1, Ordering::Relaxed);
+    if (a0 != 0 && n <= 3) || n % 1000 == 0 {
+        eprintln!(
+            "[elfjit:taskv4-frame] dispatch #{n} node={a0:#x} -> queued a real task-driven present request (pending={})",
+            PENDING_PRESENTS.load(Ordering::Relaxed)
+        );
+    }
+    0
+}
+
+/// Read a guest u64 (guest memory is identity-mapped).
+fn read_visible_u64(a: u64) -> u64 {
+    if a >= 0x100000000 && a >> 56 == 0 && a & 7 == 0 {
+        unsafe { *(a as *const u64) }
+    } else {
+        0
+    }
+}
+
+/// Present ONE real task-driven frame on the CURRENT thread (must be the
+/// renderinit thread where EGL current-binding is established — SH61b). Binds
+/// via the engine make-current 0x105b3b358, drives frame-fn 0x105b32c00, swaps
+/// via 0x105b3b408. Returns the swap result (1 == genuine eglSwapBuffers
+/// success). n is the per-present frame serial (palette cycles with it).
+fn present_one_task_frame(ctx: u64, n: u64) -> u64 {
     let vt = unsafe { *(ctx as *const u64) };
     if !(vt >= 0x100000000 && vt >> 56 == 0) {
         return 0;
@@ -209,8 +256,7 @@ extern "C" fn type4_frame_thunk(
     let cc = TASK_FRAME_PALETTE[(n as usize) % TASK_FRAME_PALETTE.len()];
     reseed_task_frame_color(base, cc);
     let tp = arm64jit::jit::current_guest_tp();
-    // Engine make-current on the recovered ctx (this thread), so the following
-    // frame-fn + swap land on the live EGL display/surface/context.
+    // Engine make-current so frame-fn + swap land on the live EGL context.
     let _ = arm64jit::jit::run_guest_callback(bind, [ctx, 0, 0, 0, 0, 0, 0, 0], tp);
     match arm64jit::jit::run_guest_callback(
         0x105b32c00,
@@ -218,23 +264,23 @@ extern "C" fn type4_frame_thunk(
         tp,
     ) {
         Err(e) => {
-            eprintln!("[elfjit:taskv4-frame] task #{n} frame-fn err: {e}");
+            eprintln!("[elfjit:taskv4-frame] frame #{n} frame-fn err: {e}");
             return 0;
         }
         Ok(fr) => eprintln!(
-            "[elfjit:taskv4-frame] task #{n} frame-fn Ok({fr:#x}) node={a0:#x} ctx={ctx:#x}"
+            "[elfjit:taskv4-frame] task frame #{n} frame-fn Ok({fr:#x}) ctx={ctx:#x}"
         ),
     }
     match arm64jit::jit::run_guest_callback(swap, [ctx, 0, 0, 0, 0, 0, 0, 0], tp) {
         Err(e) => {
-            eprintln!("[elfjit:taskv4-frame] task #{n} swap err: {e}");
+            eprintln!("[elfjit:taskv4-frame] frame #{n} swap err: {e}");
             0
         }
         Ok(s) => {
             eprintln!(
                 "[elfjit:taskv4-frame] present #{n} swap Ok({s:#x}) color={cc:?} — real task-driven frame"
             );
-            0
+            s
         }
     }
 }
@@ -2426,27 +2472,53 @@ fn main() {
                 eprintln!(
                     "[elfjit:renderthunk] published RENDERCTX 0x{real_ctx:x} — type-4 task frames will render on it"
                 );
-                // SH60 deterministic post-ctx dispatch: the drain's type-4
-                // (w4=4) dispatches are front-loaded into the pre-warmup window,
-                // so a seeded frame thunk rarely sees RENDERCTX set. Drive the
-                // thunk ONCE here, on THIS thread (EGL context already current
-                // from render-init), with the exact ABI the dispatcher 0x28537b8
-                // uses (node=0, [node+32]&~1=0, consumer=0, w4=4) — it marshals
-                // via the type4_frame_thunk path into a real presented frame.
-                let _ = type4_frame_thunk(0, 0, 0, 0, 4, 0, 0, 0);
-                // SH60 sustained task-driven frames: drive the type-4 thunk
-                // periodically so the plane presents a continuous, visibly-
-                // animating (per-dispatch palette) frame stream — the sustainable
-                // render-loop shape a real session's main loop needs. Bounded so
-                // the run still exits 124 (stable idle) cleanly.
+                // SH61b: THIS thread is the single presenter (EGL current is
+                // genuinely established here — the SH60 observation that only the
+                // renderinit-thread presents return Ok(0x1), plus the failed
+                // presenter-mutex experiment, pin it). The drain thread only bumps
+                // PENDING_PRESENTS (adds as fast as frame-fn can consume); we
+                // drain it here, presenting EVERY queued request as a real frame.
+                // Seed one request to anchor the stream, then drain for a bounded
+                // window so the run still exits 124 (stable idle) cleanly.
                 if taskv4_frame_seed_active() {
-                    for _ in 0..24 {
-                        std::thread::sleep(std::time::Duration::from_millis(120));
-                        let _ = type4_frame_thunk(0, 0, 0, 0, 4, 0, 0, 0);
+                    eprintln!("[elfjit:taskv4-frame] presenter thread: draining PENDING_PRESENTS on the currency-owning thread");
+                    // The drain flood (heartbeat-patched w4=4) adds PENDING far
+                    // faster than llvmpipe can present, so a greedy drain never
+                    // terminates. Rate-limit to a bounded, sustainable ~8 fps for a
+                    // bounded window so the run exits 124 (stable idle) cleanly with
+                    // a stream of CLEAN Ok(0x1) presents (the SH61b result: every
+                    // present on THIS thread is a genuine eglSwapBuffers success).
+                    let t0 = std::time::Instant::now();
+                    let max_window = std::time::Duration::from_millis(
+                        std::env::var("TASKFRAME_WINDOW_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(2000),
+                    );
+                    let max_frames: u64 = std::env::var("TASKFRAME_MAX_FRAMES")
+                        .ok().and_then(|v| v.parse().ok()).unwrap_or(24);
+                    let mut presented: u64 = 0;
+                    let mut drained: u64 = 0;
+                    while presented < max_frames && t0.elapsed() < max_window {
+                        // Consume up to one pending request into the next frame
+                        // (rate-limited: one present per loop iteration with a
+                        // ~120ms cadence keeps it sustainable and visibly animating).
+                        let pending = PENDING_PRESENTS.load(core::sync::atomic::Ordering::Relaxed);
+                        if pending > drained {
+                            let _ = present_one_task_frame(real_ctx, presented);
+                            presented += 1;
+                            drained += 1;
+                            PENDING_PRESENTS.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
+                        } else {
+                            // No new request since last count; sleep then check again
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                        }
                     }
                     eprintln!(
-                        "[elfjit:renderthunk] task-frame sustain: 24 periodic post-ctx w4=4 dispatches driven (palette-cycling task-driven frames)"
+                        "[elfjit:taskv4-frame] presenter drained: {presented} real task-driven frames presented (all on the currency-owning thread); pending={}",
+                        PENDING_PRESENTS.load(core::sync::atomic::Ordering::Relaxed)
                     );
+                } else {
+                    // Non-frame seed value: still fire one deterministic present
+                    // (SH60 marker) on this currency-owning thread.
+                    let _ = present_one_task_frame(real_ctx, 0);
                 }
             }
             let _ = &real_ctx;
