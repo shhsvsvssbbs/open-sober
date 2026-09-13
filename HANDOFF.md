@@ -1,5 +1,57 @@
 # Open Sober — Agent Handoff
 
+## Session (Sep 13, 2026, hermes-worker, cycle SH62) — drove the engine's REAL scene renderer (guest 0x105b2ead4): the engine constructs+registers its OWN frame-desc (vtable 0x1067317b0) and presents it via the real ctx swap — replacing the SH60/61 harness-fabricated clear-path renderer. Workspace **507/0** (was 506/0, +1). Commits b30eaae + b39a525. Doc docs/frontier-sh62-renderscene.md, artifact runs/sh62-renderscene.txt, repro runs/capture_renderscene.sh.
+
+Two READ-ONLY research subagents + my disasm of real libroblox.so pinned the concrete
+frontier artifact: the engine's REAL frame-plane driver is `0x105b2ead4` (scene
+renderer), and — disasm-proven — it builds+links a real 0x98 frame-desc
+**UNCONDITIONALLY, even with an EMPTY scene list**: bind ctx (vt+16 make-current),
+read view W/H at R+0x170+112/116, dims-query (ctx-vt+64), then operator-new(0x98)
+0x1d96768 -> frame-desc ctor 0x5b34de8 (sets vtable 0x6731000+0x7b0=0x1067317b0 at
+[+0], [+140]=w7, [+144]=1) -> link 0x5b2d9e0(&R+0x170, frame); ONLY THEN compares
+scene list head/tail (R+0x180/0x188); empty => skip => return 1.
+
+New elfjt `--renderscene`: arm a fabricated-but-engine-native render-manager R
+(R+0x160=recovered real ctx, R+0x170=view w/ SENTINEL W/H, R+0x180==R+0x188 empty),
+drive 0x105b2ead4(R) on the currency-owning renderinit thread after RENDERCTX, verify
+engine_registered (frame non-zero, [+144]==1), present via real ctx swap 0x105b3b408.
+
+**Empirical (real libroblox.so, runs/sh62-renderscene.txt, exit 124):**
+`scene renderer Ok(0x1)`; `R+0x170 frame=0x7fb68a1c8c00 node=0x7fb689fa4f30
+engine_registered=true frame[vtable]=0x1067317b0[+140]=0x0`; `present #N swap Ok(0x1)`
+x3; persist 45B byte-exact; zero SIGSEGV/SIGABRT/json-overflow.
+
+**Key empirical catch (SDLC):** setting the fabricated view W/H to 1280x720 —
+exactly the live EGL surface dims the dims-query returns — makes the renderer's
+"dims unchanged = frame already built" check (`cmp w8,x22; b.eq skip`) SKIP the build
+(R+0x170 stays = our view). Fix: view W/H = sentinel 0xFFFFFFFF/0xFFFFFFFE (never ==
+surface dims) forces the BUILD branch; engine constructs the frame at the REAL dims.
+
+**Honest scope:** activates the engine's real scene-renderer frame plane + proves it
+constructs/registers its own frame item headlessly — but the item is the frame-desc,
+NOT a populated login/home UI screen. R+0x180 scene list is still EMPTY (fast path).
+Real screens need the engine to populate the scene list with UI items = the Lua
+app-shell + auth/network (standing structural wall). Contribution: engine's own
+frame-desc construction is provably reachable headlessly; the repeated SH18/60
+fabricated clear renderer is replaced by the engine's real frame-desc construction.
+
+**Next frontier:** populate R+0x180 scene list — construct a real 0x28-stride scene
+node (node+8 coherent render obj, node+24 real view) so the renderer's per-node loop
+presents engine-detailed content, not just the single empty-scene frame-desc. Depends
+on the in-image scene-item builder (file 0x5b2c828 / 0x5b2eb7c / 0x5b2ec1c) or a real
+screen-construction entry beyond the Lua wall.
+
+Also this cycle: fixed a pre-existing **concurrency race** in the resolver —
+`resolve_gles_int/mixed/egl` probed the cache WITHOUT the lock, dlsym'd, then
+`alloc_slot` re-locked and allocated a fresh slot WITHOUT re-checking the cache. Two
+threads resolving the same GLES name got two DIFFERENT adjacent slots (off-by-8),
+breaking the slot-identity invariant the API/tests rely on
+(`egl_get_proc_address_routes_guest_blr_to_dispatchable_slot_e2e` failed in the full
+parallel workspace run, passed 5/5 in isolation). Fixed: `alloc_slot` now
+re-checks `r.slots` under the already-held lock (idempotent-in-cache), closing the race
+for every caller in one place. Full arm64jit suite passed 6/6 parallel runs (was
+flaky); workspace 507/0. Commit f942d23.
+
 ## Session (Sep 13, 2026, hermes-worker, cycle SH61b) — closed the SH60 cross-thread swap Ok(0x0) wall. **On the real libroblox.so taskv4-frame recipe: 24/24 task-driven presents are now genuine eglSwapBuffers Ok(0x1), ZERO Ok(0x0)** (was 25 Ok(0x1) / 5924 Ok(0x0) in SH60), exit 124. Commit 68b3362. Doc docs/frontier-sh61b-single-owner-presenter.md, artifacts runs/sh61b-presenter.txt + runs/sh61b-product-reverify.txt.
 
 An empirical negative pinned the fix. I first tried a global presenter **mutex**
