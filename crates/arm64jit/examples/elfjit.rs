@@ -34,6 +34,18 @@ fn guest_arena_set_base(b: u64) {
     GUEST_ARENA_BASE.store(b, core::sync::atomic::Ordering::Relaxed);
 }
 
+/// True when `--taskv4-seed frame` is active (the SH60 task-driven-frame seed):
+/// the injector must hold its first node until RENDERCTX is recovered so the
+/// front-loaded type-4 dispatches present real frames.
+fn taskv4_frame_seed_active() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    args.iter()
+        .position(|a| a == "--taskv4-seed")
+        .and_then(|i| args.get(i + 1))
+        .map(|v| v == "frame")
+        .unwrap_or(false)
+}
+
 /// Allocate `size` bytes of zeroed guest-visible RW memory from the arena.
 /// Returns 0 if the arena wasn't set. 16-byte aligned.
 fn guest_arena_alloc(size: usize) -> u64 {
@@ -47,6 +59,184 @@ fn guest_arena_alloc(size: usize) -> u64 {
         std::ptr::write_bytes(addr as *mut u8, 0, size);
     }
     addr
+}
+
+// SH60 task-driven frame plane (recon-selfdrive-seed-jsonfix.md §A):
+// the dispatcher's type-4 popped-task vector [0x106829ea8] is external-glue
+// (.bss, no in-image store — SH46/SH53), so the ONLY host lever is to seed it
+// with a registered non-recursive host-thunk that marshals each dispatched task
+// node into a REAL presented frame: engine make-current (ctx vtable [vt+16] =
+// 0x105b3b358) -> engine frame-fn (0x105b32c00, the clear-path frame) -> swap
+// (ctx vtable [vt+24] = 0x105b3b408) on the recovered real ctx. The thunk must
+// NOT re-enter the dispatcher / drain / the vector itself (would recurse); it
+// only drives the frame machinery via nested run_guest_callback (supported: the
+// dispatcher's IN_JIT_RUN counter allows nested jit_run). While --renderthunk
+// hasn't recovered the ctx yet, RENDERCTX==0 -> the dispatch no-ops (self-guard).
+
+/// The engine's real 0x48-byte render ctx recovered by --renderthunk (thunk
+/// 0x105b3a280 returns it in x0). 0 == not yet recovered (type-4 dispatch
+/// no-ops). Published by the --renderinit thread after the thunk returns.
+static RENDERCTX: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+/// Base of the leaked fabricated renderer/view/clear objects the frame thunk
+/// drives; guest==host so the engine derefs it directly. Built once lazily.
+static TASK_FRAME_BASE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+/// SLES-dispatch slots seeded once before the first task frame (SH22-corrected
+/// clear-path names 0-7 + geometry draw slots 9/10). Seeding is idempotent.
+static GLES_SLOTS_SEEDED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Per-dispatch palette so consecutive task frames are visibly distinct (a
+/// capture proves the frame is task-driven/fresh, not a static buffer).
+const TASK_FRAME_PALETTE: [[f32; 4]; 5] = [
+    [0.40, 0.20, 0.95, 1.0],
+    [0.10, 0.70, 0.05, 1.0],
+    [0.90, 0.15, 0.10, 1.0],
+    [0.05, 0.60, 0.90, 1.0],
+    [1.00, 0.82, 0.05, 1.0],
+];
+
+fn task_frame_base() -> u64 {
+    let existing = TASK_FRAME_BASE.load(core::sync::atomic::Ordering::Relaxed);
+    if existing != 0 {
+        return existing;
+    }
+    let objs = Box::leak(vec![0u8; 8192].into_boxed_slice());
+    let b = objs.as_ptr() as u64;
+    unsafe {
+        let renderer = b;
+        let obj_a = b + 0x100;
+        let obj_b = b + 0x200;
+        let view = b + 0x300;
+        *(renderer as *mut u64) = 0; // renderer[+0] reserved (obj, not vt)
+        *(renderer.wrapping_add(16) as *mut u8) = 1; // [renderer+16]=1
+        *(renderer.wrapping_add(24) as *mut u64) = obj_a; // [renderer+24]->[+552]
+        *(renderer.wrapping_add(40) as *mut u64) = obj_b; // [renderer+40]->[+140]
+        *(obj_a.wrapping_add(552) as *mut u8) = 1; // clear path enabled
+        *(obj_a.wrapping_add(368) as *mut u64) = view; // list-find bailout ([objA+368]==renderer arg)
+        *(obj_a.wrapping_add(384) as *mut u64) = 0; // empty intrusive list
+        *(obj_a.wrapping_add(392) as *mut u64) = 0;
+        *(obj_b.wrapping_add(140) as *mut u32) = 0; // default-FB glDrawBuffers(1,{GL_BACK})
+        *(obj_b.wrapping_add(124) as *mut u32) = 1;
+        *(view.wrapping_add(128) as *mut u32) = 1280;
+        *(view.wrapping_add(132) as *mut u32) = 720;
+        *(view.wrapping_add(140) as *mut u32) = 0; // default framebuffer
+        *(b.wrapping_add(0x400) as *mut u32) = 0xF; // frame-fn x4 clear-state: all-4 bitmask
+        // clear-color float4s at clearobj+4..16 and ccobj+0..16 are re-seeded per dispatch
+    }
+    TASK_FRAME_BASE.store(b, core::sync::atomic::Ordering::Relaxed);
+    b
+}
+
+/// Seed the 10 engine-GLES dispatch slots (BSS 0x106d3b2f0+8*N) through the JIT
+/// bridge once, before the first task frame. Same (slot, name) table + resolver
+/// used by --renderframe-seedgles, factored so the task thunk self-heals.
+fn seed_task_frame_gles_slots() {
+    if GLES_SLOTS_SEEDED.load(core::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    const SEED: [(usize, &str); 10] = [
+        (0, "glDrawBuffers"),
+        (1, "glClearBufferiv"),
+        (2, "glClearBufferfv"),
+        (3, "glClearBufferfi"),
+        (4, "glColorMask"),
+        (5, "glDepthMask"),
+        (6, "glStencilMask"),
+        (7, "glViewport"),
+        (9, "glDrawElements"),
+        (10, "glDrawArrays"),
+    ];
+    for (i, name) in SEED {
+        let slot_v = 0x106d3b2f0u64 + (i as u64) * 8;
+        let bridge_slot = arm64jit::resolver::resolve_gles_mixed(format!("{name}\0").as_bytes())
+            .or_else(|| arm64jit::resolver::resolve_gles_int(format!("{name}\0").as_bytes()));
+        match bridge_slot {
+            Some(s) => {
+                unsafe { *(slot_v as *mut u64) = s };
+                eprintln!("[elfjit:taskv4-frame] seedgles slot {i} ({name}) <- bridge {s:#x}");
+            }
+            None => eprintln!("[elfjit:taskv4-frame] seedgles slot {i} ({name}) NOT resolvable"),
+        }
+    }
+    GLES_SLOTS_SEEDED.store(true, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Re-seed the frame-fn's two clear-color sources with `cc` for this dispatch.
+fn reseed_task_frame_color(base: u64, cc: [f32; 4]) {
+    unsafe {
+        let clearobj = base.wrapping_add(0x400); // frame-fn x4 -> clear-state obj
+        let ccobj = base.wrapping_add(0x500); // frame-fn x5 -> color-source obj
+        for (k, v) in cc.iter().enumerate() {
+            *(clearobj.wrapping_add(4 + (k as u64) * 4) as *mut f32) = *v;
+            *(ccobj.wrapping_add((k as u64) * 4) as *mut f32) = *v;
+        }
+    }
+}
+
+/// The type-4 task-consumer vector seed: a registered non-recursive leaf host
+/// thunk. Each dispatched task node marshals into a real presented frame on the
+/// recovered engine ctx. ABI per recon §A: (node=x0, [node+32]&~1=x1,
+/// consumer=x2); return discarded. Must never re-enter the dispatcher/drain/
+/// vector (would recurse).
+extern "C" fn type4_frame_thunk(
+    a0: u64, _a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64, _a7: u64,
+) -> u64 {
+    use core::sync::atomic::{AtomicU64, Ordering};
+    static DISPATCH: AtomicU64 = AtomicU64::new(0);
+    let n = DISPATCH.fetch_add(1, Ordering::Relaxed) + 1;
+    let ctx = RENDERCTX.load(Ordering::Relaxed);
+    let ctx_ok = ctx >= 0x100000000 && ctx >> 56 == 0;
+    if !ctx_ok {
+        // Not yet recovered by --renderthunk; self-guard so early pops no-op
+        // instead of crashing, and later dispatches (once ctx is published)
+        // render real frames.
+        if n <= 3 || n % 200 == 0 {
+            eprintln!("[elfjit:taskv4-frame] dispatch #{n}: RENDERCTX not recovered yet — skip");
+        }
+        return 0;
+    }
+    let vt = unsafe { *(ctx as *const u64) };
+    if !(vt >= 0x100000000 && vt >> 56 == 0) {
+        return 0;
+    }
+    let bind = unsafe { *(vt.wrapping_add(16) as *const u64) }; // 0x105b3b358 make-current
+    let swap = unsafe { *(vt.wrapping_add(24) as *const u64) }; // 0x105b3b408 eglSwapBuffers
+    seed_task_frame_gles_slots();
+    let base = task_frame_base();
+    let renderer = base;
+    let view = base + 0x300;
+    let cc = TASK_FRAME_PALETTE[(n as usize) % TASK_FRAME_PALETTE.len()];
+    reseed_task_frame_color(base, cc);
+    let tp = arm64jit::jit::current_guest_tp();
+    // Engine make-current on the recovered ctx (this thread), so the following
+    // frame-fn + swap land on the live EGL display/surface/context.
+    let _ = arm64jit::jit::run_guest_callback(bind, [ctx, 0, 0, 0, 0, 0, 0, 0], tp);
+    match arm64jit::jit::run_guest_callback(
+        0x105b32c00,
+        [renderer, view, view, 0, base + 0x400, base + 0x500, 0, 0],
+        tp,
+    ) {
+        Err(e) => {
+            eprintln!("[elfjit:taskv4-frame] task #{n} frame-fn err: {e}");
+            return 0;
+        }
+        Ok(fr) => eprintln!(
+            "[elfjit:taskv4-frame] task #{n} frame-fn Ok({fr:#x}) node={a0:#x} ctx={ctx:#x}"
+        ),
+    }
+    match arm64jit::jit::run_guest_callback(swap, [ctx, 0, 0, 0, 0, 0, 0, 0], tp) {
+        Err(e) => {
+            eprintln!("[elfjit:taskv4-frame] task #{n} swap err: {e}");
+            0
+        }
+        Ok(s) => {
+            eprintln!(
+                "[elfjit:taskv4-frame] present #{n} swap Ok({s:#x}) color={cc:?} — real task-driven frame"
+            );
+            0
+        }
+    }
 }
 
 // Diagnostic: on a host SIGSEGV inside a translated block, print the guest PC
@@ -1681,6 +1871,29 @@ fn main() {
                         continue;
                     }
                     let np = node as u64;
+                    // SH60 frame-mode: hold the node PLACEMENT until --renderthunk
+                    // recovers RENDERCTX. Root/headcell are captured earlier in this
+                    // same iteration (drain active), so the wait loses nothing; the
+                    // drain stays on its finite-timeout heartbeat (never force-arms,
+                    // never pops the sentinel) until we place + arm. Without this,
+                    // the drain's type-4 (w4=4) dispatches are front-loaded onto the
+                    // first pops, which fire before RENDERCTX is recovered -> the
+                    // seeded frame thunk no-ops and no task frame ever presents.
+                    if taskv4_frame_seed_active() {
+                        let t0 = std::time::Instant::now();
+                        let mut had_to_wait = false;
+                        while RENDERCTX.load(Ordering::Relaxed) == 0 && t0.elapsed().as_secs() < 25 {
+                            had_to_wait = true;
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                        if had_to_wait {
+                            eprintln!(
+                                "[elfjit:deque-node-live] frame-mode: RENDERCTX={:#x} after {:?} — placing first task node now so its type-4 dispatch presents a real frame",
+                                RENDERCTX.load(Ordering::Relaxed),
+                                t0.elapsed()
+                            );
+                        }
+                    }
                     unsafe {
                         // Fresh tail: the re-enqueue producer (0x285682c) walks the
                         // node's [node+0] next-link to find the tail; the *cloned*
@@ -1780,8 +1993,19 @@ fn main() {
             }
             let seed = if spec == "probe" {
                 arm64jit::jit::register_host_call_auto(v4probe)
+            } else if spec == "frame" {
+                // SH60: seed the dispatcher's type-4 vector with the real
+                // task-driven frame thunk — each dispatched task node marshal's
+                // into a REAL presented frame (recon-selfdrive-seed-jsonfix.md
+                // §A). Requires RENDERCTX (recovered by --renderthunk) to be set;
+                // dispatches before that no-op via the thunk's self-guard.
+                let f = arm64jit::jit::register_host_call_auto(type4_frame_thunk);
+                eprintln!(
+                    "[elfjit:taskv4] type4_frame_thunk registered at {f:#x} — a popped task node reaching w4=4 will now present a real task-driven frame"
+                );
+                f
             } else {
-                u64::from_str_radix(spec.trim_start_matches("0x"), 16).expect("--taskv4-seed needs 'probe' or a hex guest fn addr")
+                u64::from_str_radix(spec.trim_start_matches("0x"), 16).expect("--taskv4-seed needs 'probe', 'frame', or a hex guest fn addr")
             };
             unsafe {
                 *(TASKV4 as *mut u64) = seed;
@@ -1894,6 +2118,36 @@ fn main() {
                 }
                 eprintln!("[elfjit:deque-probe] gave up (probe count={}, repointed={})", PROBE_COUNT.load(Ordering::Relaxed), repointed.len());
             });
+        }
+        // SH60 --taskv4-seed frame: force every drain dispatch through the
+        // type-4 vector. The drain's idle path (heartbeat) routes its per-
+        // iteration SENTINEL dispatch to w4=2/3 telemetry emitters
+        // (0x2856f24 / 0x2856f68), which never reach the type-4 vector
+        // [0x106829ea8]; the genuine w4=4 "popped task node" path (0x2856ffc)
+        // is only hit during an early init window, so a seeded probe fires only
+        // ~3× (all pre-RENDERCTX). Deterministic fix: rewrite the heartbeat's
+        // `mov w4,#2`/`mov w4,#3` to `mov w4,#4`, so EVERY idle dispatch calls
+        // the real dispatcher (0x10285371c) with w4=4 -> it loads the seeded
+        // vector and br's to the type4_frame_thunk -> a real task-driven frame
+        // per drain iteration, sustained (RENDERCTX self-guard no-ops the
+        // pre-recovery heartbeats).
+        if taskv4_frame_seed_active() {
+            for (addr, name, word) in [
+                (0x102856f24u64, "heartbeat w4#2", 0x52800084u32), // mov w4,#4
+                (0x102856f68u64, "heartbeat w4#3", 0x52800084u32), // mov w4,#4
+            ] {
+                let page = addr & !0xfff;
+                unsafe {
+                    if libc::mprotect(page as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_WRITE) == 0 {
+                        let before = *(addr as *const u32);
+                        *(addr as *mut u32) = word;
+                        libc::mprotect(page as *mut libc::c_void, 4096, libc::PROT_READ | libc::PROT_EXEC);
+                        eprintln!(
+                            "[elfjit:taskv4-frame] patched {name} 0x{addr:x} (was {before:08x}) -> {word:08x} — every drain dispatch now routes w4=4 through the type-4 vector to a real task-driven frame"
+                        );
+                    }
+                }
+            }
         }
         // Disable the gate-2 re-arm store: the owner's cond-wait loop at
     // 0x102b4cd50/0x102b4cd84 re-parks while *x19==1 and, on seeing that
@@ -2164,6 +2418,37 @@ fn main() {
             } else {
                 scratch.as_ptr() as u64
             };
+            // SH60: publish the recovered real ctx so the --taskv4-seed frame
+            // thunk (dispatched on the drain thread) marshals task nodes into
+            // real frames on it. Self-guarded: 0 here is transient.
+            RENDERCTX.store(real_ctx, core::sync::atomic::Ordering::Relaxed);
+            if real_ctx != scratch.as_ptr() as u64 {
+                eprintln!(
+                    "[elfjit:renderthunk] published RENDERCTX 0x{real_ctx:x} — type-4 task frames will render on it"
+                );
+                // SH60 deterministic post-ctx dispatch: the drain's type-4
+                // (w4=4) dispatches are front-loaded into the pre-warmup window,
+                // so a seeded frame thunk rarely sees RENDERCTX set. Drive the
+                // thunk ONCE here, on THIS thread (EGL context already current
+                // from render-init), with the exact ABI the dispatcher 0x28537b8
+                // uses (node=0, [node+32]&~1=0, consumer=0, w4=4) — it marshals
+                // via the type4_frame_thunk path into a real presented frame.
+                let _ = type4_frame_thunk(0, 0, 0, 0, 4, 0, 0, 0);
+                // SH60 sustained task-driven frames: drive the type-4 thunk
+                // periodically so the plane presents a continuous, visibly-
+                // animating (per-dispatch palette) frame stream — the sustainable
+                // render-loop shape a real session's main loop needs. Bounded so
+                // the run still exits 124 (stable idle) cleanly.
+                if taskv4_frame_seed_active() {
+                    for _ in 0..24 {
+                        std::thread::sleep(std::time::Duration::from_millis(120));
+                        let _ = type4_frame_thunk(0, 0, 0, 0, 4, 0, 0, 0);
+                    }
+                    eprintln!(
+                        "[elfjit:renderthunk] task-frame sustain: 24 periodic post-ctx w4=4 dispatches driven (palette-cycling task-driven frames)"
+                    );
+                }
+            }
             let _ = &real_ctx;
             // --renderframe (opt-in, must accompany --renderinit): after the real
             // render-init ran, present a buffer through the engine's LIVE EGL

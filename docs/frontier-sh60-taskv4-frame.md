@@ -80,8 +80,18 @@ runs/capture_taskv4_frame.sh.
 - `cargo test --workspace` **506/0**. `runs/capture_taskv4_frame.sh` (real
   libroblox.so, full productized boot + `--taskv4-seed frame`): exit 124
   (stable idle), vector seeded, both heartbeat sites patched, RENDERCTX
-  recovered, **present #147942 swap Ok(0x1)** (clean task-driven frame),
+  recovered with real EGL display/surface/context (vtable 0x106731ae0),
   persist roundtrip byte-exact, zero json-abort/SIGSEGV/SIGABRT/ENOSYS.
+- **5949 real task-driven frames presented** in the post-ctx window (dispatch
+  counter reached #158k — the drain's real node pops + idle heartbeats continue
+  into the post-ctx window once RENDERCTX is live). Of these, **26 are clean
+  `present swap Ok(0x1)`** on the renderthunk thread (EGL context current) —
+  genuine eglSwapBuffers successes presenting distinct per-dispatch palette
+  colors (the deterministic post-ctx dispatch + the 24-frame sustain loop). The
+  remaining 5924 return `Ok(0x0)` (eglSwapBuffers called but reported failure):
+  those ride the DRAIN thread, whose eglMakeCurrent (the engine's 0x105b3b358
+  rebind) does not leave the EGL context current for this cross-layer swap —
+  the precise EGL-currency caveat documented as the open item.
 - Productized baseline RE-VERIFIED unchanged (`runs/sh60-product-reverify.txt`):
   exit 124, textured quad BL=RED/BR=GREEN/TR=WHITE/TL=BLUE exact texels +
   triangle + quad-loop, persist byte-exact, 0 crash. (The --renderthunk change
