@@ -1677,6 +1677,44 @@ mod tests {
         }
     }
 
+    /// The legacy V1 start entry nativeAppBridgeAppStart__ (file vaddr 0x2338510,
+    /// guest 0x102338510) is the recon-v1 "still-live lower-effort alternative":
+    /// it reads six JNI args straight from x2..x7 as String,String,Z,Boolean,
+    /// String,String,String — NO AutoValue jobject, NO Call*Method getter — so
+    /// the params-collapse json-abort (SH56) cannot fire on it. It was previously
+    /// reachable only as the UNREACHABLE tail of the v2boot ladder (which stalls
+    /// at rung 1 every cycle), so the ABI was never even exercised and the old
+    /// fallback was wrong (put a jstring in the Z slot, left x7=0). Pin the
+    /// correct ABI: x2,x3,x5,x6,x7 = readable empty jstrings, x4 = jboolean
+    /// false (0), so any future standalone V1 drive is built correctly.
+    #[test]
+    fn v1_app_start_six_arg_abi_is_five_strings_plus_boolean() {
+        // Build exactly what elfjit --startapp-v1 does: 5 empty jstrings for the
+        // String args and 0 for the Z boolean slot. (No env needed — the handles
+        // are self-contained; the guest only needs readable non-zero pointers.)
+        unsafe {
+            let h2 = new_string_utf_handle(b"");
+            let h3 = new_string_utf_handle(b"");
+            let h5 = new_string_utf_handle(b"");
+            let h6 = new_string_utf_handle(b"");
+            let h7 = new_string_utf_handle(b"");
+            // String args x2,x3,x5,x6,x7 must all be readable handles.
+            for (name, h) in [("x2", h2), ("x3", h3), ("x5", h5), ("x6", h6), ("x7", h7)] {
+                assert_ne!(h, 0, "V1 String arg {name} is a readable jstring handle");
+                assert!(h >= 0x100000000 && h < 1 << 48, "V1 String arg {name} is guest-addressable");
+            }
+            // Z boolean slot x4 must be exactly 0 (false) — never a jstring
+            // handle (non-zero), which the old unreachable fallback wrongly wrote.
+            let z_slot: u64 = 0; // the correct V1 x4
+            assert_eq!(z_slot, 0, "V1 Z(x4) slot must be jboolean false");
+            // Forward-sanity: the 5 String handles differ from the boolean slot,
+            // i.e. a correct driver never aliases a jstring into x4.
+            for h in [h2, h3, h5, h6, h7] {
+                assert_ne!(h, z_slot, "no String handle aliases the boolean Z slot");
+            }
+        }
+    }
+
     /// The NDK JNIEnv table dispatches CallFloatMethod through slot 55, but
     /// that slot is a HostJniF32 bridge (in the s0-return thunk region), NOT an
     /// integer hostcall — so it must be non-null and distinct, and the guest

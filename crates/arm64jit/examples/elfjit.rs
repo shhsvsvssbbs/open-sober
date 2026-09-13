@@ -698,6 +698,19 @@ fn main() {
         // recon-v2 Task-2 prescription. This is the live A/B on whether the value
         // registry unblocks StartApp's json serialization or whether the SH45
         // guest-stack-leak is genuinely params-independent.
+        // --startapp-v1: drive the recon v1 "still-live lower-effort"
+        // nativeAppBridgeAppStart__ (0x102338510) as the PRIMARY standalone
+        // start INSTEAD of V2StartAppWithParams. V1 reads 6 individual jstrings
+        // (JNI signature String,String,Z,String,String,String straight from the
+        // mangled sym Java_...AppStart__Ljava_lang_String_2Ljava_lang_String_2Z
+        // Ljava_lang_String_2Ljava_lang_String_2Ljava_lang_String_2) — no AutoValue
+        // jobject, no Call*Method getter, so it BYPASSES the params-collapse
+        // json-abort (SH56: the value registry never even fires on the V2 path).
+        // It has only ever run as the UNREACHABLE tail of the v2boot ladder
+        // (which stalls at rung 1 nativeGameGlobalInit every time), so its
+        // downstream path (session/home-screen renderer) was NEVER exercised.
+        // This lever drives it standalone so that path is finally reached.
+        let use_v1 = std::env::args().any(|a| a == "--startapp-v1");
         let params = if std::env::args().any(|a| a == "--startapp-jobject") {
             arm64jit::jni::new_fake_object() // AutoValue InitParams/StartAppParams jobject
         } else {
@@ -705,8 +718,12 @@ fn main() {
         };
         let link = u64::from_str_radix(hex.trim_start_matches("0x"), 16)
             .unwrap_or_else(|_| panic!("bad --startapp hex"));
-        let start_app = el.guest_of(link);
-        eprintln!("[elfjit] driving StartApp @ guest {start_app:#x} after JNI_OnLoad (env={env_ptr:#x} jobject={activity:#x} params={params:#x})");
+        // V1 entry guest addr = file 0x2338510 + base. link here is the V2 file
+        // vaddr (0x258b144) from the product recipe; --startapp-v1 swaps the
+        // target (and the s2 ABI below) to the V1 6-jstring entry.
+        let start_app = el.guest_of(if use_v1 { 0x2338510u64 } else { link });
+        eprintln!("[elfjit] driving StartApp @ guest {start_app:#x} after JNI_OnLoad (env={env_ptr:#x} jobject={activity:#x} params={params:#x}){}",
+            if use_v1 { " [V1 6-jstring AppStart__]" } else { "" });
 
         // --v2boot: drive the REAL engine boot ladder IN ORDER (the SH53-open
         // runtime test + the recon's corrective for the bare/out-of-order
@@ -786,11 +803,16 @@ fn main() {
                 sv.x[31] = boot_sp;
                 sv.x[0] = env_ptr;
                 sv.x[1] = thiz;
+                // Correct V1 AppStart__ ABI: String,String,Z,String,String,String
+                // -> 5 empty jstrings + boolean(false) in x2..x7 (the old fallback
+                // put a jstring in the Z slot and left x7=0 — a never-exercised
+                // wrong ABI, corrected here to match the current descriptor).
                 sv.x[2] = arm64jit::jni::new_string_utf_handle(b"");
                 sv.x[3] = arm64jit::jni::new_string_utf_handle(b"");
-                sv.x[4] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[4] = 0; // jboolean false
                 sv.x[5] = arm64jit::jni::new_string_utf_handle(b"");
                 sv.x[6] = arm64jit::jni::new_string_utf_handle(b"");
+                sv.x[7] = arm64jit::jni::new_string_utf_handle(b"");
                 match arm64jit::jit::jit_run(iimg, ib, 0x102338510, &mut sv as *mut CpuState) {
                     Err(e) => eprintln!("[elfjit:v2boot] V1 AppStart__ stopped: {e}"),
                     Ok(r) => eprintln!("[elfjit:v2boot] V1 AppStart__ returned Ok({r:#x})"),
@@ -865,7 +887,23 @@ fn main() {
         s2.x[31] = st.x[31]; // guest SP
         s2.x[0] = env_ptr;
         s2.x[1] = activity;
-        s2.x[2] = params;
+        if use_v1 {
+            // nativeAppBridgeAppStart__(JNIEnv*, jobject, jstring, jstring,
+            // jboolean Z, jstring, jstring, jstring): 6 args -> x2..x7.
+            // Pass 5 empty strings + boolean false (no AutoValue getters, so no
+            // params-collapse json-abort possible on this path). The old
+            // v2boot fallback put a jstring in the x4 Z-slot and left x7=0 —
+            // a wrong ABI that was never exercised; here it is corrected.
+            s2.x[2] = arm64jit::jni::new_string_utf_handle(b"");
+            s2.x[3] = arm64jit::jni::new_string_utf_handle(b"");
+            s2.x[4] = 0; // jboolean false
+            s2.x[5] = arm64jit::jni::new_string_utf_handle(b"");
+            s2.x[6] = arm64jit::jni::new_string_utf_handle(b"");
+            s2.x[7] = arm64jit::jni::new_string_utf_handle(b"");
+            eprintln!("[elfjit:startapp-v1] V1 AppStart__ ABI: x0=env x1=thiz x2..x7 = 5 empty jstrings + boolean(false)");
+        } else {
+            s2.x[2] = params;
+        }
         // Concurrent guest-thread state sampler (JIT_THREADS=1). StartApp's
         // `jit_run` parks the main thread forever (the engine main-loop
         // lifecycle-await), so a post-run sampler would never run. Instead
